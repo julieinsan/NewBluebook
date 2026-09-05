@@ -60,12 +60,71 @@ const FALLBACK_ORDER: Record<Difficulty, Difficulty[]> = {
   hard: ["hard", "medium", "easy"],
 };
 
-/** Splits `total` into easy/medium/hard counts per `mix`, guaranteed to sum to `total`. */
+/**
+ * Order in which leftover units are handed out when two difficulties have an equal
+ * claim to them. Leans easy for the same reason `FALLBACK_ORDER` breaks medium's ties
+ * toward easy: the bank already skews hard, so a coin-flip resolved hard-ward would
+ * compound that skew.
+ */
+const REMAINDER_TIE_BREAK: Difficulty[] = ["easy", "medium", "hard"];
+
+/**
+ * Splits `total` into easy/medium/hard counts per `mix`, guaranteed to sum to `total`
+ * with no negative bucket, for ANY mix that sums to 1.
+ *
+ * Uses largest-remainder (Hamilton) allocation: floor every bucket, then hand the
+ * leftover units to whichever buckets were cut hardest by that flooring.
+ *
+ * The previous implementation rounded easy and hard independently and let medium
+ * absorb the difference (`medium = total - easy - hard`). That summed to `total` only
+ * by luck: whenever rounding pushed easy + hard above `total`, medium went NEGATIVE,
+ * and `assembleModuleForSection`'s `if (remaining <= 0) continue` silently swallowed
+ * it -- over-filling the domain past its blueprint count. Not reachable with today's
+ * three mixes, but these constants are documented as tunable, so the invariant should
+ * hold by construction rather than by arithmetic coincidence.
+ *
+ * Largest-remainder also tracks the requested proportions more closely than
+ * independent rounding did. For a 25/50/25 mix over 6 questions, the old code returned
+ * 2/2/2 (medium a full question short of its 3.0 target); this returns 2/3/1.
+ *
+ * Throws if `mix` doesn't sum to 1 -- with a mix summing to less than 1 there'd be no
+ * principled home for the surplus, and with one summing to more the floors alone could
+ * exceed `total`. Either way it's a caller bug worth surfacing loudly.
+ */
 export function splitByDifficulty(total: number, mix: DifficultyMix): Record<Difficulty, number> {
-  const easy = Math.round(total * mix.easy);
-  const hard = Math.round(total * mix.hard);
-  const medium = total - easy - hard;
-  return { easy, medium, hard };
+  const mixSum = mix.easy + mix.medium + mix.hard;
+  if (Math.abs(mixSum - 1) > 1e-9) {
+    throw new Error(
+      `Difficulty mix must sum to 1, got ${mixSum} ` +
+        `(easy ${mix.easy}, medium ${mix.medium}, hard ${mix.hard})`,
+    );
+  }
+
+  const exact: Record<Difficulty, number> = {
+    easy: total * mix.easy,
+    medium: total * mix.medium,
+    hard: total * mix.hard,
+  };
+
+  const counts: Record<Difficulty, number> = {
+    easy: Math.floor(exact.easy),
+    medium: Math.floor(exact.medium),
+    hard: Math.floor(exact.hard),
+  };
+
+  // Hand out the units lost to flooring, largest fractional remainder first.
+  // Array#sort is stable, so equal remainders keep REMAINDER_TIE_BREAK's order.
+  const byRemainder = REMAINDER_TIE_BREAK.slice().sort(
+    (a, b) => exact[b] - Math.floor(exact[b]) - (exact[a] - Math.floor(exact[a])),
+  );
+
+  let leftover = total - (counts.easy + counts.medium + counts.hard);
+  for (let i = 0; leftover > 0; i += 1) {
+    counts[byRemainder[i % byRemainder.length]] += 1;
+    leftover -= 1;
+  }
+
+  return counts;
 }
 
 interface AssembleParams {
