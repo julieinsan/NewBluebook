@@ -267,16 +267,67 @@ const MODULE2_PATH_COLUMN: Record<Section, string> = {
 };
 
 /**
+ * Thrown by `finalizeModule1` when that section's Module 1 is already stamped.
+ *
+ * ## Why this is a type and not just a message
+ *
+ * Ending Module 1 is two calls -- `finalizeModule1` (throws on repeat) then
+ * `assembleModule2ForSection` (idempotent) -- and Epic 3 delivers that pair from an HTTP
+ * request that is *expected* to arrive twice: a double-clicked Submit, a browser retry,
+ * or Story 3.3's expiry auto-submit firing at the same instant the student clicks. The
+ * transition therefore has to recognise "an earlier delivery already finalized this" and
+ * fall through to assembly, which will hand back the Module 2 already on record.
+ *
+ * Recognising it by `err.message.includes(...)` would couple every caller to the exact
+ * wording below, and a future edit to that sentence would turn a recoverable duplicate
+ * into a 500 with nothing failing in CI to say so. So the signal gets a type, and the
+ * seam (`lib/moduleTransition.ts`) branches on `instanceof`.
+ *
+ * The message text is deliberately unchanged from the bare `Error` this replaced: the
+ * loud-failure behaviour every other caller sees is exactly as before, and the existing
+ * `/cannot be submitted twice/` assertions still hold. This class *adds* a way to
+ * discriminate; it does not soften the throw. Making `finalizeModule1` a silent no-op was
+ * considered and rejected -- it would hide a genuinely buggy caller double-submitting
+ * across different attempts.
+ */
+export class ModuleAlreadySubmittedError extends Error {
+  /** The attempt whose Module 1 was already finalized. */
+  readonly attemptId: number;
+  /** The section whose Module 1 was already finalized. */
+  readonly section: Section;
+  /**
+   * The `{section}_module1_submitted_at` stamp already on the row: SQLite
+   * `datetime('now')` text (UTC, no `T`, no `Z`). Parse it with `parseSqliteTimestamp`
+   * from `lib/testFlow.ts` if you need an instant -- never with `new Date()`.
+   */
+  readonly submittedAt: string;
+
+  constructor(attemptId: number, section: Section, submittedAt: string) {
+    super(
+      `Module 1 for section "${section}" of attempt ${attemptId} was already submitted ` +
+        `at ${submittedAt} -- a module cannot be submitted twice`,
+    );
+    this.name = "ModuleAlreadySubmittedError";
+    this.attemptId = attemptId;
+    this.section = section;
+    this.submittedAt = submittedAt;
+  }
+}
+
+/**
  * Declares a section's Module 1 finished by stamping `{section}_module1_submitted_at`
  * (migration 0008). This is the single event that unlocks `assembleModule2ForSection`,
  * and it is the *only* durable evidence that the student actually ended the module --
  * answers alone can't say that, since they're saved continuously while the module is
  * still in progress.
  *
- * Throws if that section's Module 1 is already stamped. A module cannot be submitted
- * twice, and treating a duplicate submit as a no-op would hide the far more likely
- * cause: a double-submitted form or a retried request that would otherwise be silently
- * accepted.
+ * Throws `ModuleAlreadySubmittedError` if that section's Module 1 is already stamped. A
+ * module cannot be submitted twice, and treating a duplicate submit as a no-op would hide
+ * the far more likely cause: a double-submitted form or a retried request that would
+ * otherwise be silently accepted. The one caller that legitimately expects duplicates --
+ * `endModule1` in `lib/moduleTransition.ts` -- catches that specific type and falls
+ * through to assembly; see the class comment for why it is a type rather than a message
+ * to match on.
  */
 export function finalizeModule1(db: Database.Database, attemptId: number, section: Section): void {
   const column = MODULE1_SUBMITTED_AT_COLUMN[section];
@@ -290,10 +341,7 @@ export function finalizeModule1(db: Database.Database, attemptId: number, sectio
       throw new Error(`Attempt ${attemptId} does not exist`);
     }
     if (row.submittedAt != null) {
-      throw new Error(
-        `Module 1 for section "${section}" of attempt ${attemptId} was already submitted ` +
-          `at ${row.submittedAt} -- a module cannot be submitted twice`,
-      );
+      throw new ModuleAlreadySubmittedError(attemptId, section, row.submittedAt);
     }
 
     db.prepare(`UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ?`).run(attemptId);
