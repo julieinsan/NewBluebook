@@ -1,43 +1,28 @@
 # Epic 3 — Test-Taking Experience: implementation plan
 
-**Status:** Wave 0 landed; Wave 1 ready to start (revision 3 — see §9)
+**Status:** Waves 0–3 and Task 4.1 landed; **Task 4.2 (manual QA) is the only remaining gate** (revision 4 — see §11)
 **Covers:** PRD Stories 3.1–3.6, plus the requirement in
-[epic-3-module-transition-seam.md](epic-3-module-transition-seam.md)
+[epic-3-module-transition-seam.md](epic-3-module-transition-seam.md), plus practice-app pause/resume (§3.1, D13)
 **Depends on:** Epics 0–2 (schema, ingestion, assembly engine) — all landed.
+**Verification:** 93 `npm test`, 29 `npm run test:ui`, `npm run build` clean, `npm run smoke:flow` passes.
 
 ---
 
-## 1. Where we're starting from
+## 1. Where we started (Epic 2 handoff)
 
-Epic 2 left a complete, tested server-side assembly engine and no UI at all:
+Epic 2 left a complete, tested server-side assembly engine and no UI. Epic 3 closed the
+five gaps identified at kickoff:
 
-| Exists | Where |
+| Gap | Resolution |
 |---|---|
-| Schema, migration runner (0001–0008) | `migrations/`, `lib/migrations.ts` |
-| Blueprint config (counts, 32/35-min module limits) | `lib/blueprint.ts` |
-| LRU selection, module assembly, adaptive routing | `lib/questionSelector.ts`, `lib/moduleAssembly.ts`, `lib/adaptiveRouting.ts` |
-| `startNewAttempt` / `saveAnswer` / `finalizeModule1` / `assembleModule2ForSection` | `lib/attemptService.ts` |
-| In-memory SQLite test harness (`node:test`) | `lib/attemptService.test.ts` |
-| Scaffold page + Bluebook palette tokens | `app/page.tsx`, `app/globals.css` |
+| No transition seam | `lib/moduleTransition.ts` — §4, Task 1.1 |
+| No timer authority | Migration 0009 + D3/D3a — module/break `started_at` stamps |
+| No completion state past Module 1 | `{section}_module2_submitted_at` columns + D10 |
+| No read model for a runner | `readModuleQuestions` export — Task 0.3, `getRunnerModule` |
+| No UI test runner | Vitest + Testing Library — Task 0.5 |
 
-Epic 3 is the first epic that puts a human in front of that engine. Everything the
-engine does not yet track — *where the student is*, *how much time is left*, *whether
-this request already happened* — has to be added here.
-
-### 1.1 The five gaps
-
-1. **No transition seam.** `finalizeModule1` throws on repeat, `assembleModule2ForSection`
-   is idempotent. See §4 — this is the requirement the seam doc raises, and it is Task 1.1.
-2. **No timer authority.** Nothing records when a module *started*, so a countdown can't
-   survive a refresh and auto-submit can't be trusted.
-3. **No completion state past Module 1.** There is `{section}_module1_submitted_at` but no
-   equivalent for Module 2, so "R&W is done, go to the break" is underivable.
-4. **No read model for a runner.** `readAssembledModule`
-   ([attemptService.ts:316](../lib/attemptService.ts#L316)) is private *and* selects only
-   `q.*, order_index, was_recycled` — it returns neither `user_answer` nor `flagged`, so it
-   cannot rehydrate a runner as-is.
-5. **No UI test runner.** `npm test` globs `lib/**/*.test.ts` only; nothing can render a
-   component. Fixed in Task 0.5.
+Everything below §2 is the original plan; Waves 0–3 and 4.1 are **done**. See §11 for the
+completion log.
 
 ---
 
@@ -105,12 +90,12 @@ components against a persistence path that already works.
 `status='submitted'` + `submitted_at` and lands on a plain confirmation page. Epic 5
 replaces that page; nothing else in Epic 3 depends on scoring.
 
-**D7 — DB-reading pages must call `connection()` first.** Not optional and easy to miss:
+**D7 — DB-reading pages must call `connection()` first.** ✔ Not optional and easy to miss:
 without a Request-time API, Next prerenders these pages at build and a synchronous
 `better-sqlite3` query *completes during prerendering*. The framework docs call out
 better-sqlite3 by name
 (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/connection.md`).
-`app/page.tsx` already has this latent bug — its question count is baked in at build.
+Added to `app/page.tsx` and all test routes in Task 3.1.
 
 **D8 — The section break is 10 minutes, counted down, skippable.** ✔ `break_started_at`
 is stamped when R&W Module 2 ends; the break screen counts down against it (so a refresh
@@ -143,6 +128,23 @@ window: flagging, un-flagging and (later) cross-out are navigation aids, not ans
 a student tidying flags a second after the buzzer has not gained anything. Only
 `POST .../answers` enforces D3's grace window.
 
+**D13 — Practice-app pause freezes the active clock; resume is explicit from home.** ✔
+Added post-Wave 3 (migration 0010). Intentionally diverges from real Bluebook, where module
+time never stops. `pauseAttempt` stamps `paused_at` + `paused_phase` (which of the five
+clocks is frozen: `rw:1`, `rw:2`, `break`, `math:1`, `math:2`) without changing position
+stamps. `resumeAttempt` accumulates elapsed seconds into the matching `*_pause_seconds`
+column and clears the pause stamp. While paused:
+
+- Countdowns freeze via `effectiveNow` / `effectiveModuleDeadline` / `effectiveBreakDeadline`
+- Answers are rejected (`saveAnswerWithDeadline` returns `{saved: false}`)
+- All test routes redirect to `/` (`redirectIfPaused` in `guardPosition.ts`)
+- Resume is **only** from home (`ResumeButton` → `POST .../resume` → `next`); in-progress
+  attempts that are not paused deep-link directly via `listAttempts().path`
+
+Resume lands at the **module runner** (question 1), not review or the exact question —
+consistent with D4's module-granular position (§9 item 8). Pausing from the review screen
+still resumes to the runner; review sub-position is not persisted.
+
 ---
 
 ## 3. Schema change (migration 0009)
@@ -162,6 +164,25 @@ ALTER TABLE test_attempts ADD COLUMN break_started_at          TEXT;
 `started_at` powers D3's timer and resume; `break_started_at` does the same for D8's
 break. `module2_submitted_at` closes gap 1.3 — with it, section and attempt completion are
 fully derivable from `test_attempts` alone, with no counting of answered rows.
+
+### 3.1 Schema change (migration 0010 — pause/resume, D13)
+
+Seven columns on `test_attempts`, all landed:
+
+```sql
+ALTER TABLE test_attempts ADD COLUMN paused_at TEXT;
+ALTER TABLE test_attempts ADD COLUMN paused_phase TEXT
+  CHECK (paused_phase IS NULL OR paused_phase IN ('rw:1', 'rw:2', 'break', 'math:1', 'math:2'));
+ALTER TABLE test_attempts ADD COLUMN rw_module1_pause_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE test_attempts ADD COLUMN rw_module2_pause_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE test_attempts ADD COLUMN break_pause_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE test_attempts ADD COLUMN math_module1_pause_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE test_attempts ADD COLUMN math_module2_pause_seconds INTEGER NOT NULL DEFAULT 0;
+```
+
+Domain: `lib/pauseTransition.ts` (`pauseAttempt` / `resumeAttempt`). Pause-adjusted
+deadlines and frozen clocks live in `lib/testFlow.ts`; read models in `lib/attemptState.ts`
+(`getBreakTimer`, `TimerInfo.paused`).
 
 ---
 
@@ -201,20 +222,16 @@ Done when the seam doc's three "Done when" bullets hold.
 
 Thirteen tasks in four waves. Wave *n* may not start until wave *n−1* is merged.
 
-### Wave 0 — Contracts (serial, main session, no subagents)
+### Wave 0 — Contracts ✅ Done
 
-Nothing else can start until the shapes everyone codes against exist. This wave is the
-reason Waves 1–3 can parallelize at all, and the review in §9 moved work *into* it
-precisely because two Wave 1 tasks were otherwise going to collide.
-
-| # | Task | Files (owner: main) |
-|---|---|---|
-| 0.1 | Migration 0009 (§3) | `migrations/0009_add_module_timing.sql` |
-| 0.2 | Shared types — `AttemptState`, `SectionState`, `ModulePosition`, `RunnerModule`, `RunnerQuestion`, `TimerInfo` — **plus the pure deadline functions** `moduleDeadline(section, module, startedAt)` and `breakDeadline(breakStartedAt)`, computed from `blueprint.ts` alone | `lib/testFlow.ts` (new) |
-| 0.3 | Widen `readAssembledModule` to also select `user_answer`, `flagged`, `crossed_out_choices`, `highlights`, and export it as `readModuleQuestions` | `lib/attemptService.ts` |
-| 0.4 | Break duration constant (D8) beside the module limits | `lib/blueprint.ts` |
-| 0.5 | Vitest + Testing Library setup (§5.6) | `vitest.config.mts`, `package.json` |
-| 0.6 | Freeze the HTTP contract (§5.5) into this doc | this file |
+| # | Task | Files | Status |
+|---|---|---|---|
+| 0.1 | Migration 0009 (§3) | `migrations/0009_add_module_timing.sql` | ✅ |
+| 0.2 | Shared types + deadline functions | `lib/testFlow.ts` | ✅ |
+| 0.3 | Widen and export `readModuleQuestions` | `lib/attemptService.ts` | ✅ |
+| 0.4 | Break duration constant (D8) | `lib/blueprint.ts` | ✅ |
+| 0.5 | Vitest + Testing Library setup (§5.6) | `vitest.config.mts`, `package.json` | ✅ |
+| 0.6 | Freeze the HTTP contract (§5.5) into this doc | this file | ✅ |
 
 **0.2's deadline functions are load-bearing for parallelism.** Task 1.3 needs a deadline
 to enforce D3's grace window and Task 1.2 needs one to build `TimerInfo`. If that logic
@@ -228,49 +245,45 @@ own query and duplicating the `wasRecycled` CTE — the one piece of logic in th
 a subtle correctness argument behind it (it compares serve-log `id`, not `served_at`,
 because whole-second timestamps tie). One owner for that query.
 
-### Wave 1 — Server domain (3 subagents, fully parallel)
+### Wave 1 — Server domain ✅ Done
 
-All three are pure TypeScript against the in-memory SQLite harness, no React, no Next —
-the best subagent work in the epic: crisp contracts, disjoint files, and `npm test` is the
-objective pass/fail.
-
-| # | Task | Owns | Subagent? |
+| # | Task | Owns | Status |
 |---|---|---|---|
-| 1.1 | **Transitions & the seam** (§4): `ModuleAlreadySubmittedError`; `endModule1`, `endModule2`, `endBreak`, `submitAttempt`. Every stamp write-if-null (D3a). No standalone `startModule` — each transition stamps the *next* module's clock, so nothing needs to stamp during render | `lib/attemptService.ts`, `lib/moduleTransition.ts`, `lib/moduleTransition.test.ts` | ✅ Yes |
-| 1.2 | **State machine + read models**: `getAttemptState`, `resolveCurrentPosition` (D4, module granularity), `getRunnerModule` (on 0.3's widened query), `listAttempts`. Read-only — no writes anywhere in this file. Imports deadlines from `testFlow.ts`, never from 1.3 | `lib/attemptState.ts`, `lib/attemptState.test.ts` | ✅ Yes |
-| 1.3 | **Per-question state**: `saveAnswerWithDeadline` (D3 grace, deadline from `testFlow.ts`), `setFlag`, `setChoiceState` (D5 plumbing) | `lib/questionState.ts`, `lib/questionState.test.ts` | ✅ Yes |
+| 1.1 | **Transitions & the seam** (§4) | `lib/moduleTransition.ts`, `lib/moduleTransition.test.ts` | ✅ |
+| 1.2 | **State machine + read models** | `lib/attemptState.ts`, `lib/attemptState.test.ts` | ✅ |
+| 1.3 | **Per-question state** | `lib/questionState.ts`, `lib/questionState.test.ts` | ✅ |
 
 Each imports from `attemptService.ts` / `blueprint.ts` / `testFlow.ts`, but only 1.1 edits
 any pre-existing file.
 
-### Wave 2 — HTTP + presentational UI (3 subagents, parallel)
+### Wave 2 — HTTP + presentational UI ✅ Done
 
-| # | Task | Owns | Subagent? |
+| # | Task | Owns | Status |
 |---|---|---|---|
-| 2.1 | **Route handlers** per §5.5 — thin: parse, validate, call Wave 1, map `ModuleAlreadySubmittedError`→200, unknown→500 | `app/api/attempts/**/route.ts` | ⚠️ Yes, with the contract pinned |
-| 2.2 | **Chrome & primitives**, fixture-driven, zero DB: `TopBar` (section/module label, hide-reveal timer, more-menu), `BottomBar` (Back/Next pills, "Question X of Y"), `ReviewGrid` (answered/unanswered/flagged bubbles), `ConfirmDialog`, `ChoiceRow` (A–D oval rows, flag toggle, cross-out slot left dark for Epic 4), `BreakCountdown` (D8) | `app/(test)/_components/*` + colocated `*.test.tsx` | ✅ Yes — PRD §8 is the spec |
-| 2.3 | **Question renderers**, fixture-driven: R&W two-pane (stimulus scrolls left, stem+choices right), Math single-pane, grid-in input, markdown+KaTeX via the already-installed `react-markdown`/`remark-math`/`rehype-katex`, `figure_asset_path` images | `app/(test)/_components/question/*` + colocated `*.test.tsx` | ✅ Yes |
+| 2.1 | **Route handlers** per §5.5 | `app/api/attempts/**/route.ts` | ✅ |
+| 2.2 | **Chrome & primitives** | `app/(test)/_components/*` + `*.test.tsx` | ✅ |
+| 2.3 | **Question renderers** | `app/(test)/_components/question/*` + `*.test.tsx` | ✅ |
 
 2.2 and 2.3 consume only Wave 0 types, so they can start the moment Wave 0 lands — in
 practice alongside Wave 1, not after it.
 
-### Wave 3 — Pages & integration (mostly main session)
+### Wave 3 — Pages & integration ✅ Done
 
-This is where the pieces meet and where bugs will actually live. Keep 3.2 in the main
-session.
-
-| # | Task | Stories | Owns | Subagent? |
+| # | Task | Stories | Owns | Status |
 |---|---|---|---|---|
-| 3.1 | **Home screen**: start new test (D9), resume in-progress (deep-links to `resolveCurrentPosition`), past attempts, drill-mode entry stub. Adds `connection()` to `app/page.tsx` (D7) | 3.1 | `app/page.tsx`, `app/_components/home/*` | ✅ Yes |
-| 3.2 | **Module runner**: server page (D4 guard + redirect, sub-position passed through) → client runner holding answers/flags/index; autosave with in-flight coalescing and unload flush; countdown against the server deadline; auto-submit on expiry | 3.2, 3.3, 3.4 | `app/(test)/test/[attemptId]/[section]/[module]/*` | ❌ Keep in main |
-| 3.3 | **Review, break, submit, stub**: end-of-module review screen (flagged/unanswered), section break (D8: 10-min countdown off `break_started_at`, "Resume testing" → `end-break`), submit confirmation dialogs, submitted stub page | 3.4, 3.5, 3.6 | `app/(test)/test/[attemptId]/review|break|submitted/*` | ✅ Yes, after 3.2 |
+| 3.1 | **Home screen** | 3.1 | `app/page.tsx`, `app/_components/home/*` | ✅ |
+| 3.2 | **Module runner** | 3.2, 3.3, 3.4 | `app/(test)/test/[attemptId]/[section]/[module]/*` | ✅ |
+| 3.3 | **Review, break, submit, stub** | 3.4, 3.5, 3.6 | `app/(test)/test/[attemptId]/review\|break\|submitted/*` | ✅ |
+
+**Post-Wave 3 add-on (D13):** pause/resume UI and API — `PauseAndExitMenu`, `ResumeButton`,
+`POST .../pause`, `POST .../resume`, migration 0010.
 
 ### Wave 4 — Verification
 
-| # | Task | Owns | Subagent? |
+| # | Task | Owns | Status |
 |---|---|---|---|
-| 4.1 | **Lifecycle test** driving the domain layer start→submit: 27/22 counts per module, double-delivery of end-module at *both* section boundaries, expired-module auto-submit, break start/end stamping, resume-after-refresh position, double-start idempotence (D9) | `lib/testFlowLifecycle.test.ts`, `scripts/smoke-test-flow.ts`, `package.json` | ✅ Yes |
-| 4.2 | **Manual QA**: run the app, walk a full attempt, check against PRD §8; covers the async Server Components Vitest cannot render (§5.6) | — | ❌ Main session (`/run`) |
+| 4.1 | **Lifecycle test** — full start→submit domain walk, double-delivery at both section boundaries, expired-module behavior, break stamping, resume-after-refresh, D9 double-start | `lib/testFlowLifecycle.test.ts`, `scripts/smoke-test-flow.ts`, `package.json` | ✅ |
+| 4.2 | **Manual QA** — browser walk-through against PRD §8 (see checklist below) | — | ⬜ Remaining |
 
 ### 5.5 HTTP contract (frozen — Task 2.1 implements exactly this)
 
@@ -282,11 +295,14 @@ session.
 | `POST /api/attempts/:id/end-module` | `{section, module}` | `{next, module2?}` | **Idempotent** — §4. Same 200 on every delivery. Stamps the next clock (D3a); ending R&W module 2 stamps `break_started_at` |
 | `POST /api/attempts/:id/end-break` | — | `{next}` | **Idempotent.** Ends D8's break early or on expiry; stamps `math_module1_started_at` |
 | `POST /api/attempts/:id/submit` | — | `{ok}` | Idempotent; sets `status='submitted'` |
+| `POST /api/attempts/:id/pause` | — | `{ok}` | **D13.** Freezes active clock; idempotent. Client navigates to `/` |
+| `POST /api/attempts/:id/resume` | — | `{next}` | **D13.** Accumulates pause seconds; returns D11 path to module/break/submitted |
 
 Every response is JSON; every handler returns the caller's *next position* so the client
 never has to guess a route. Per **D11** `next` is always the path string from
 `pathForPosition`. Ending Math Module 2 returns `submittedPath(...)` per **D10**, whether
-or not `submit` has been called yet.
+or not `submit` has been called yet. (`pause` is the exception — it returns `{ok}` and the
+client always goes home.)
 
 ### 5.6 UI test setup (Task 0.5) and its hard limit
 
@@ -362,22 +378,38 @@ Two constraints that will otherwise cost an afternoon:
 | `resolveCurrentPosition` and `status` disagree about a finished attempt | D10 — position keys off `math_module2_submitted_at`; `status` is for Epics 5/7 |
 | Runner state sprawls into an unmaintainable client component | 2.2/2.3 stay presentational; all state lives in the one runner in 3.2 |
 | UI coverage looks better than it is | §5.6 names the boundary: async Server Components are manual-QA only |
+| Stale tab POSTs while paused | Guards block page loads; transition endpoints do not yet reject paused attempts |
+| Pause from review resumes to runner Q1 | By design per D4/D13; review sub-position is not persisted |
 
 ---
 
 ## 8. Suggested execution order
 
 ```
-Wave 0  (main, serial)          ──►  0.1  0.2  0.3  0.4  0.5  0.6
-Wave 1  (3 subagents, parallel) ──►  1.1  1.2  1.3
-Wave 2  (3 subagents, parallel) ──►  2.1  2.2  2.3      (2.2/2.3 may start with Wave 1)
-Wave 3  (main + 2 subagents)    ──►  3.1  3.2  3.3      (3.3 after 3.2)
-Wave 4                          ──►  4.1  4.2
+Wave 0  ✅  0.1–0.6
+Wave 1  ✅  1.1–1.3
+Wave 2  ✅  2.1–2.3
+Wave 3  ✅  3.1–3.3  (+ pause/resume, D13)
+Wave 4       4.1 ✅   4.2 ⬜ manual QA
 ```
 
-Nine of the thirteen tasks are subagent-suitable. The four that aren't are Wave 0
-(defines everyone else's contract), Task 3.2 (the integration centre of the epic), and 4.2
-(needs a human looking at the screen).
+Epic 3 closes when Task 4.2 passes. Next epic: **Epic 4 — In-Test Tools** (PRD Stories 4.1–4.4).
+
+### Task 4.2 manual QA checklist
+
+Run `npm run dev`, walk a full attempt in the browser:
+
+1. **Home (3.1):** Start new test; resume in-progress; attempt history; drill stub disabled
+2. **Runner (3.2):** Next/Back; review-grid jump; answers persist after refresh
+3. **Timer (3.3):** Hide/reveal countdown; auto-submit on expiry
+4. **Flagging + review (3.4):** Flag toggle; end-of-module review lists flagged/unanswered; confirm dialog
+5. **Break (3.5):** 10-min countdown; "Resume testing" ends early; refresh resumes break timer
+6. **Submit (3.6):** Module submit confirmation; Math M2 → submitted stub
+7. **Guards (D4):** Back button / stale URL redirects to canonical position; `/review` not bounced
+8. **Pause (D13):** Pause from runner, review, and break → home; timer frozen; resume → same module/break with same remaining time; answers blocked while paused
+9. **Visual (PRD §8):** Top/bottom bars, two-pane R&W, single-pane Math, blue accent palette
+
+Known deferrals (not Epic 3): Math calculator and reference sheet (Epic 4.3/4.4); cross-out UI (Epic 4.1).
 
 ---
 
@@ -432,3 +464,27 @@ assembly and read-back share one shape (this was the compatibility risk flagged 
 0.3); `is_correct` is deliberately excluded from that shape, since it feeds D1's runner
 payload and correctness must not reach the client mid-test; and `crossed_out_choices` /
 `highlights` stay raw JSON text, because D5 plumbs them and Epic 4 owns their shape.
+
+---
+
+## 11. Review log (revision 3 → 4, Waves 1–4.1 + pause)
+
+All thirteen original tasks plus pause/resume landed on branch `epic-3/wave-0-contracts`:
+
+1. **Waves 1–3 shipped as specified.** Domain layer (`moduleTransition`, `attemptState`,
+   `questionState`), seven HTTP route handlers, presentational components, and integrated
+   pages (home, runner, review, break, submitted stub). `connection()` on all DB-reading
+   Server Components (D7).
+2. **Wave 4.1 automated verification.** `lib/testFlowLifecycle.test.ts` (8 tests) covers
+   full lifecycle, double-delivery at both section boundaries, expired-module grace,
+   break stamping, resume-after-refresh deadline stability, and D9 double-start.
+   `scripts/smoke-test-flow.ts` (`npm run smoke:flow`) replays the same invariants against
+   the real DB.
+3. **Pause/resume added (D13, migration 0010).** Practice-app feature beyond the original
+   thirteen tasks. `lib/pauseTransition.ts`, pause/resume API routes, `PauseAndExitMenu` on
+   runner/review/break, `ResumeButton` on home, pause-adjusted deadlines in `testFlow.ts`.
+   `lib/pauseTransition.test.ts` covers freeze, idempotence, answer block, and break pause.
+4. **Build fix.** `BREAK_DURATION_SECONDS` imported from `lib/blueprint.ts` in
+   `attemptState.ts` (was incorrectly imported from `testFlow.ts`, which does not re-export it).
+5. **Test counts at close of 4.1:** 93 `npm test`, 29 `npm run test:ui`, `npm run build`
+   clean. Task 4.2 (manual browser QA per §8 checklist) is the remaining gate.
