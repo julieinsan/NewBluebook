@@ -23,6 +23,7 @@ import {
   finalizeModule1,
   submitModule1Answers,
   assembleModule2ForSection,
+  readModuleQuestions,
   type AssembledModuleQuestion,
 } from "./attemptService";
 
@@ -255,4 +256,59 @@ test("a failed Module 2 assembly rolls back its routing path and serve-log rows"
     .prepare("SELECT rw_module2_difficulty_path AS p FROM test_attempts WHERE id = ?")
     .get(attemptId) as { p: string | null };
   assert.equal(path.p, null, "the routing path written before the failure must roll back");
+});
+
+test("readModuleQuestions returns the student's saved work alongside the questions", () => {
+  const db = makeTestDb();
+  const { attemptId, rw } = startNewAttempt(db);
+
+  // A freshly assembled module has no work on it yet -- and says so, rather than
+  // omitting the field, so the two producers of AssembledModuleQuestion match.
+  const fresh = readModuleQuestions(db, attemptId, "rw", 1);
+  assert.equal(fresh.length, rw.length);
+  assert.deepEqual(fresh[0].state, {
+    userAnswer: null,
+    flagged: false,
+    crossedOutChoices: null,
+    highlights: null,
+  });
+  assert.deepEqual(
+    rw.map((q) => q.state),
+    fresh.map((q) => q.state),
+    "insertModuleQuestions and readModuleQuestions must agree on a fresh module",
+  );
+
+  // Write one of each kind of per-question state -- flagged/cross-out/highlights are
+  // Epic 3 D5 plumbing with no UI yet, so this read path is the only thing proving the
+  // columns are actually carried.
+  const target = rw[3].question.id;
+  saveAnswer(db, attemptId, "rw", 1, target, "C");
+  db.prepare(
+    `UPDATE test_attempt_questions
+     SET flagged = 1, crossed_out_choices = ?, highlights = ?
+     WHERE attempt_id = ? AND section = 'rw' AND module = 1 AND question_id = ?`,
+  ).run('["A","B"]', '[{"start":0,"end":9}]', attemptId, target);
+
+  const saved = readModuleQuestions(db, attemptId, "rw", 1);
+  const row = saved.find((q) => q.question.id === target)!;
+  assert.deepEqual(row.state, {
+    userAnswer: "C",
+    flagged: true,
+    // Carried as raw JSON text on purpose: Epic 4 owns the parsed shape.
+    crossedOutChoices: '["A","B"]',
+    highlights: '[{"start":0,"end":9}]',
+  });
+
+  // Untouched rows stay untouched, and order_index order is preserved.
+  assert.equal(saved[0].state.flagged, false);
+  assert.deepEqual(
+    saved.map((q) => q.orderIndex),
+    rw.map((q) => q.orderIndex),
+  );
+
+  // is_correct is on the row and must not ride the read model to the client.
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(row.state, "isCorrect"),
+    "correctness must not leak into a payload the runner ships to the browser",
+  );
 });

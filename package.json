@@ -15,6 +15,7 @@
     "ingest:math": "tsx scripts/ingest-math.ts",
     "qa:questions": "tsx scripts/qa-questions.ts",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
+    "test:ui": "vitest run",
     "smoke:assembly": "tsx scripts/smoke-test-assembly.ts"
   },
   "dependencies": {
@@ -30,16 +31,22 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "eslint-config-prettier": "^10.1.8",
+    "jsdom": "^29.1.1",
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.11"
   }
 }
