@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postEndModule, postQuestionState } from "../../_lib/clientApi";
 import { useAutosave } from "../../_lib/useAutosave";
+import { useQuestionStateSave } from "../../_lib/useQuestionStateSave";
+import { parseCrossedOutChoices, serializeCrossedOutChoices, toggleCrossedOut } from "@/lib/choiceState";
 
 export interface ModuleRunnerProps {
   runnerModule: RunnerModule;
@@ -23,7 +25,17 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   const [expired, setExpired] = useState(false);
 
   const submittingRef = useRef(false);
-  const { queueSave, flushAll } = useAutosave(attemptId, section, module);
+  const { queueSave, flushAll: flushAnswers } = useAutosave(attemptId, section, module);
+  const { saveQuestionState, flushAll: flushQuestionState } = useQuestionStateSave(
+    attemptId,
+    section,
+    module,
+  );
+
+  const flushAll = useCallback(async () => {
+    await flushAnswers();
+    await flushQuestionState();
+  }, [flushAnswers, flushQuestionState]);
 
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -37,6 +49,8 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   const handleSelectChoice = useCallback(
     (letter: "A" | "B" | "C" | "D") => {
       if (expired || !currentQuestion) return;
+      const crossedOut = parseCrossedOutChoices(currentQuestion.crossedOutChoices);
+      if (crossedOut.includes(letter)) return;
       updateQuestion(currentQuestion.id, { userAnswer: letter });
       queueSave(currentQuestion.id, letter);
     },
@@ -56,6 +70,7 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   const handleToggleFlag = useCallback(async () => {
     if (expired || !currentQuestion) return;
     const nextFlagged = !currentQuestion.flagged;
+    const previousFlagged = currentQuestion.flagged;
     updateQuestion(currentQuestion.id, { flagged: nextFlagged });
     try {
       await postQuestionState(attemptId, currentQuestion.id, {
@@ -65,9 +80,26 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
       });
     } catch (err) {
       console.error("Failed to save flag:", err);
-      updateQuestion(currentQuestion.id, { flagged: currentQuestion.flagged });
+      updateQuestion(currentQuestion.id, { flagged: previousFlagged });
     }
   }, [attemptId, currentQuestion, expired, module, section, updateQuestion]);
+
+  const handleToggleCrossOut = useCallback(
+    async (letter: "A" | "B" | "C" | "D") => {
+      if (expired || !currentQuestion) return;
+      const previous = currentQuestion.crossedOutChoices;
+      const nextLetters = toggleCrossedOut(parseCrossedOutChoices(previous), letter);
+      const serialized = serializeCrossedOutChoices(nextLetters);
+      updateQuestion(currentQuestion.id, { crossedOutChoices: serialized });
+      try {
+        await saveQuestionState(currentQuestion.id, { crossedOut: serialized });
+      } catch (err) {
+        console.error("Failed to save cross-out:", err);
+        updateQuestion(currentQuestion.id, { crossedOutChoices: previous });
+      }
+    },
+    [currentQuestion, expired, saveQuestionState, updateQuestion],
+  );
 
   const goToReview = useCallback(async () => {
     await flushAll();
@@ -121,6 +153,10 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   const selectedLetter =
     currentQuestion?.questionType === "mc" ? (currentQuestion.userAnswer as "A" | "B" | "C" | "D" | null) : null;
 
+  const crossedOutLetters = currentQuestion
+    ? new Set(parseCrossedOutChoices(currentQuestion.crossedOutChoices))
+    : undefined;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="module-runner">
       <TopBar
@@ -142,6 +178,8 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
             onSelectChoice={handleSelectChoice}
             onGridInChange={handleGridInChange}
             onToggleFlag={handleToggleFlag}
+            crossedOutLetters={crossedOutLetters}
+            onToggleCrossOut={handleToggleCrossOut}
           />
         )}
       </main>

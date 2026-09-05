@@ -29,14 +29,21 @@ export async function postAnswer(
   return parseJsonResponse(response);
 }
 
+/** Body for `POST .../questions/:qid/state` — Epic 3 flagging plus Epic 4 tools. */
+export interface QuestionStatePayload {
+  section: Section;
+  module: ModuleNumber;
+  flagged?: boolean;
+  /** Raw JSON text for crossed-out choice letters (D2). */
+  crossedOut?: string | null;
+  /** Raw JSON text for passage highlight ranges (D4). */
+  highlights?: string | null;
+}
+
 export async function postQuestionState(
   attemptId: number,
   questionId: string,
-  payload: {
-    section: Section;
-    module: ModuleNumber;
-    flagged?: boolean;
-  },
+  payload: QuestionStatePayload,
 ): Promise<{ ok: boolean }> {
   const response = await fetch(`/api/attempts/${attemptId}/questions/${questionId}/state`, {
     method: "POST",
