@@ -112,6 +112,10 @@ For home test selection:
 
 ## Suggested next steps
 
-- Epic 6 Wave 3 — manual QA walk-through (§Manual QA in [epic-6-implementation-plan.md](./epic-6-implementation-plan.md))
-- Epic 4 Wave 3 — manual QA for cross-out and highlighter
-- Epic 7 — score trend chart and reset utility
+**v1 feature set:** Epics 0–6 (minus deferred math tools). Epic 7 is post-v1.
+
+- Epic 4 Wave 3 — manual QA for highlighter and regression (§6 of [epic-4-implementation-plan.md](./epic-4-implementation-plan.md))
+- Epic 3 Task 4.2 — overlaps with Epic 4 regression; one browser pass can close both
+- Optional doc tidy — mark Epic 5/6 Wave 3 QA complete in plan docs
+
+**Deferred post-v1:** Epic 7.2 score trend, Epic 7.3 reset utility; Epic 4.3–4.4 math tools.

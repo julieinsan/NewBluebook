@@ -322,9 +322,9 @@ Merge guards in one branch first (or designate one owner for `guardPosition.ts`)
 
 | Epic | Dependency on Epic 5 | Notes |
 |---|---|---|
-| **Epic 6 — Drill mode** | None for Wave 0 picker | Can start drill schema/service in parallel with Epic 5 Wave 2 UI |
-| **Epic 7.2 — Score trend** | Requires `total_scaled_score` populated | Build after Epic 5 Wave 1 |
-| **Epic 4 Wave 3** | None | Run before or in parallel with Epic 5 Wave 0 |
+| **Epic 6 — Drill mode** | None for Wave 0 picker | ✅ Landed |
+| **Epic 7.2–7.3 — Trend + reset** | — | **Deferred post-v1** (2026-09-05). Epic 7.1 persistence already satisfied by SQLite. |
+| **Epic 4 Wave 3** | None | Manual QA remaining |
 
 ---
 

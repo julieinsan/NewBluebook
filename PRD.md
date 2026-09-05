@@ -22,6 +22,7 @@ A single-user, locally-run clone of the College Board Bluebook digital SAT testi
 - Desmos graphing calculator and digital reference sheet (Math) — present in real Bluebook but deferred; users can use an external calculator or reference if needed.
 - Exact official College Board scoring/equating tables (proprietary, not available — we approximate).
 - The "Career Insights Snapshot" feature from the score report.
+- **Score trend chart and reset-all-progress utility (PRD Epic 7.2–7.3)** — deferred post-v1. Local SQLite already persists attempts, drill sessions, and scores across restarts (Epic 7.1 is satisfied by the existing schema).
 - Multi-user accounts, auth, or an admin/teacher view.
 - Proctoring, lockdown browser behavior, or exam-security features — this is a practice tool.
 - Pixel-perfect visual clone of Bluebook's UI — a clean, faithful-in-structure UI is the target, not asset-for-asset replication.
@@ -307,15 +308,17 @@ Organized as epics, each broken into independently implementable user stories wi
 
 ---
 
-### Epic 7 — Progress Tracking & History
+### Epic 7 — Progress Tracking & History *(deferred — not shipping in v1)*
 
-**Story 7.1: Attempt & drill persistence**
+**Product decision (2026-09-05):** v1 is complete without a score trend chart or in-app reset. Attempt and drill data already persist in local SQLite (Story 7.1). The stories below are retained for a possible follow-up release.
+
+**Story 7.1: Attempt & drill persistence** *(satisfied by v1 — no additional work)*
 *As a user, I want every test attempt and drill session saved locally, so that my history survives across app restarts.*
 
-**Story 7.2: History view with trend**
+**Story 7.2: History view with trend** *(deferred)*
 *As a user, I want to see my past test attempts and a simple score-over-time trend, so that I can track improvement.*
 
-**Story 7.3: Reset utility**
+**Story 7.3: Reset utility** *(deferred)*
 *As a user, I want a way to reset all local progress, so that I can start fresh if needed.*
 
 ---
@@ -326,6 +329,7 @@ Organized as epics, each broken into independently implementable user stories wi
 2. **Bank capacity:** "1 guaranteed fresh full test, then recycling starts" (Section 3.3) confirmed acceptable — no need to shrink test length to stretch content further.
 3. **Visual style:** should draw from the real Bluebook app's look (referenced a YouTube walkthrough, which could not be watched directly — no tool available to extract video frames/transcript). Styled instead from general knowledge of the real app's design language; see Section 8. User can correct specifics once the build is visible.
 4. **Math tools:** Desmos calculator and digital reference sheet are **out of scope for v1**. Epic 4 ships cross-out and highlighter only; Math modules use the same top bar as R&W (no calculator/reference icon buttons).
+5. **Progress tracking UI (Epic 7.2–7.3):** Score-over-time trend chart and reset-all-progress are **out of scope for v1**. Home already lists past attempts with scores; full history persists in SQLite without a dedicated reset flow (users can delete `data/bluebook.db` manually if needed).
 
 ## 8. Visual Style Reference
 
