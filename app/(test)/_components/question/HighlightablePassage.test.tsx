@@ -47,7 +47,7 @@ function selectDomTextOffsets(container: HTMLElement, start: number, end: number
     removeAllRanges: vi.fn(),
   };
 
-  vi.spyOn(window, "getSelection").mockReturnValue(selection as Selection);
+  vi.spyOn(window, "getSelection").mockReturnValue(selection as unknown as Selection);
   return selection;
 }
 
