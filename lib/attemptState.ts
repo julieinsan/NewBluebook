@@ -325,6 +325,7 @@ function toRunnerQuestion(
     flagged: question.state.flagged,
     crossedOutChoices: question.state.crossedOutChoices,
     highlights: question.state.highlights,
+    timeSpentSeconds: question.state.timeSpentSeconds,
   };
 }
 
@@ -402,7 +403,7 @@ export function getRunnerModule(
 }
 
 // ---------------------------------------------------------------------------
-// listAttempts (Story 3.1, D9)
+// listAttempts (Story 3.1, D9′)
 // ---------------------------------------------------------------------------
 
 /**
@@ -411,7 +412,7 @@ export function getRunnerModule(
  */
 export interface AttemptSummary {
   attemptId: number;
-  /** Practice Test 1 (first-pass) or 2 (second-pass, excludes Test 1 questions). */
+  /** Practice Test 1 (first-pass) or 2 (second-pass; prefers questions outside Test 1). */
   practiceTest: 1 | 2;
   /** `test_attempts.status` -- what Epics 5/7 filter on. Not what routing uses (D10). */
   status: AttemptStatus;
@@ -428,13 +429,13 @@ export interface AttemptSummary {
    */
   path: string;
   /**
-   * D9's "is this the attempt to resume?", derived from `position`, not from `status`.
+   * Whether this row links to an in-progress module the student can resume, derived from
+   * `position`, not from `status`.
    *
    * The two disagree exactly in D10's window (last module stamped, `submit` not yet
    * run), and `position` is the one that is right there: that attempt is over and must
-   * not be resumed, even though its row still reads `in_progress`. At most one row can
-   * have this true, which is the invariant D9's idempotent `POST /api/attempts` exists
-   * to preserve.
+   * not be resumed, even though its row still reads `in_progress`. Multiple rows may be
+   * resumable at once (D9′); resume is explicit via Attempt History.
    */
   resumable: boolean;
   /** True when the student paused and must explicitly resume from home. */

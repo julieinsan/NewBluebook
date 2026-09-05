@@ -426,6 +426,8 @@ export interface RunnerQuestion {
   crossedOutChoices: string | null;
   /** Raw JSON text; Epic 4 owns the shape (D5 plumbs it only). */
   highlights: string | null;
+  /** Cumulative active-view seconds persisted server-side (Story 3.7). */
+  timeSpentSeconds: number;
 }
 
 /**

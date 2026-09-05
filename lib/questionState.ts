@@ -7,6 +7,7 @@
  *  - `saveAnswerWithDeadline` -- `POST /api/attempts/:id/answers` -> `{saved, isLate}`
  *  - `setFlag`                -- `POST /api/attempts/:id/questions/:qid/state` (D5/3.4)
  *  - `setChoiceState`         -- the same endpoint's cross-out / highlight fields (D5)
+ *  - `addTimeSpent`           -- the same endpoint's `timeSpentDelta` field (Story 3.7)
  *
  * Everything here is one UPDATE against one already-served `test_attempt_questions`
  * row. Nothing in this file creates a row, stamps a clock, or advances the attempt:
@@ -334,6 +335,36 @@ export function setChoiceState(
       `UPDATE test_attempt_questions SET ${assignments.join(", ")}
        WHERE attempt_id = ? AND section = ? AND module = ? AND question_id = ?`,
     ).run(...values, attemptId, section, module, questionId);
+  });
+
+  run();
+}
+
+/**
+ * Adds active-view seconds to one served question (Story 3.7).
+ *
+ * Like `setFlag` and per D12, no deadline check — pacing data is not a graded artifact,
+ * and the client may flush the final seconds after auto-submit begins. The client sends
+ * incremental deltas; this function accumulates them with `time_spent_seconds + ?`.
+ */
+export function addTimeSpent(
+  db: Database.Database,
+  attemptId: number,
+  section: Section,
+  module: ModuleNumber,
+  questionId: string,
+  deltaSeconds: number,
+): void {
+  if (!Number.isInteger(deltaSeconds) || deltaSeconds <= 0) {
+    throw new Error("deltaSeconds must be a positive integer");
+  }
+
+  const run = db.transaction(() => {
+    assertQuestionInModule(db, attemptId, section, module, questionId);
+    db.prepare(
+      `UPDATE test_attempt_questions SET time_spent_seconds = time_spent_seconds + ?
+       WHERE attempt_id = ? AND section = ? AND module = ? AND question_id = ?`,
+    ).run(deltaSeconds, attemptId, section, module, questionId);
   });
 
   run();

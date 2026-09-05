@@ -104,10 +104,13 @@ when the break ends, via `end-break`. Duration is a named constant beside the mo
 limits in `lib/blueprint.ts`.
 
 **D9 — Start-new-test is idempotent against an in-progress attempt.** ✔ (review §9.5)
-A double-clicked "Start new test" must not create two in-progress attempts — "resume"
-becomes ambiguous the moment it does. `POST /api/attempts` returns the existing
-in-progress attempt with `reused: true` rather than creating a second. Discarding an
-attempt to start fresh is Epic 7.3's reset utility, not this epic.
+**Superseded by D9′** — see [home-test-selection.md](./home-test-selection.md). The home
+screen now offers Practice Test 1 / 2 and allows multiple in-progress attempts; resume is
+explicit via Attempt History.
+
+_Original D9 (Epic 3):_ A double-clicked "Start new test" must not create two in-progress
+attempts — "resume" becomes ambiguous the moment it does. `POST /api/attempts` returned the
+existing in-progress attempt with `reused: true` rather than creating a second.
 
 **D10 — An attempt is finished when Math Module 2 is.** (Wave 0 finding.) `end-module`
 stamps `math_module2_submitted_at`, while `submit` separately sets `status='submitted'` —

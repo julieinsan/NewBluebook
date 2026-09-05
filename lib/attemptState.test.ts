@@ -517,6 +517,7 @@ test("getRunnerModule never leaks correctness or the answer key to the client", 
     "orderIndex",
     "questionType",
     "stimulusText",
+    "timeSpentSeconds",
     "userAnswer",
   ]);
 });
@@ -593,7 +594,7 @@ test("getRunnerModule refuses a module that has not been assembled or has no clo
 });
 
 // ---------------------------------------------------------------------------
-// listAttempts (Story 3.1, D9)
+// listAttempts (Story 3.1, D9′)
 // ---------------------------------------------------------------------------
 
 test("listAttempts distinguishes the resumable attempt from finished ones", () => {

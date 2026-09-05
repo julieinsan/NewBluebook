@@ -19,6 +19,7 @@ export const FIXTURE_QUESTIONS: RunnerQuestion[] = [
     flagged: false,
     crossedOutChoices: null,
     highlights: null,
+    timeSpentSeconds: 0,
   },
   {
     id: "q-2",
@@ -37,6 +38,7 @@ export const FIXTURE_QUESTIONS: RunnerQuestion[] = [
     flagged: true,
     crossedOutChoices: '["B"]',
     highlights: null,
+    timeSpentSeconds: 0,
   },
   {
     id: "q-3",
@@ -50,6 +52,7 @@ export const FIXTURE_QUESTIONS: RunnerQuestion[] = [
     flagged: false,
     crossedOutChoices: null,
     highlights: null,
+    timeSpentSeconds: 0,
   },
 ];
 

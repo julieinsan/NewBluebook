@@ -119,3 +119,23 @@ test("ModuleRunner saves highlight via postQuestionState with serialized JSON", 
     });
   });
 });
+
+test("ModuleRunner flushes question time when navigating to the next question", async () => {
+  const start = Date.now();
+  let now = start;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+
+  render(<ModuleRunner runnerModule={makeRunnerModule()} />);
+  now = start + 8000;
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+  await waitFor(() => {
+    expect(postQuestionState).toHaveBeenCalledWith(42, "q-1", {
+      section: "rw",
+      module: 1,
+      timeSpentDelta: 8,
+    });
+  });
+
+  vi.restoreAllMocks();
+});

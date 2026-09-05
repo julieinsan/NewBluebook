@@ -15,6 +15,7 @@ A single-user, locally-run clone of the College Board Bluebook digital SAT testi
 - Reproduce the in-test tools called out in the Bluebook guide: timer, flagging, review screen, answer elimination, highlighter/annotation (R&W), Desmos calculator + reference sheet (Math).
 - Score attempts with an approximate 200–800 per-section / 400–1600 total scale, plus a domain-level performance view styled after the real score report.
 - Support an untimed drill mode for targeted domain/skill practice.
+- Track how much time the user spends on each question (practice tests and drill sessions), persisted locally for later review and pacing analysis.
 - Run entirely locally for one user — no accounts, no hosted backend.
 
 **Non-goals (out of scope for this build)**
@@ -92,6 +93,7 @@ Dividing bank size by per-test need, per domain:
 | Question reuse | No repeats until a domain is exhausted, then recycle least-recently-used, flagged as "seen before" |
 | Drill mode | Included — untimed, by domain/skill/difficulty, instant feedback |
 | Review timing | Only after the full test is submitted (matches real Bluebook) |
+| Per-question time | Cumulative seconds while a question is the active view; excludes module pause and time on the review screen |
 
 ### 4.1 Assumed engineering defaults (flag if you want these changed)
 
@@ -126,12 +128,14 @@ test_attempts
 test_attempt_questions
   attempt_id (fk), question_id (fk), module (1|2), section, order_index
   user_answer, is_correct, flagged (bool), crossed_out_choices (json), highlights (json)
+  time_spent_seconds (int, default 0)   -- cumulative active-view time on this question
 
 drill_sessions
   id (pk), started_at, filters (json: domain/skill/difficulty)
 
 drill_session_questions
   session_id (fk), question_id (fk), user_answer, is_correct
+  time_spent_seconds (int, default 0)
 
 question_serve_log
   question_id (fk), attempt_id or session_id, served_at   -- powers least-recently-used recycling
@@ -224,6 +228,14 @@ Organized as epics, each broken into independently implementable user stories wi
 *As a user, I want to answer one question at a time with Next/Back navigation and a visible progress indicator, so that the experience matches real Bluebook.*
 - Renders passage/problem + choices (or grid-in input); persists each answer as it's given (survives a refresh mid-module).
 
+**Story 3.7: Per-question time tracking**
+*As a user, I want the app to record how long I spend on each question during a practice test, so that I can review my pacing after the test.*
+- Time accrues only while a question is the active view in the module runner (not on the module review screen).
+- Revisiting a question (Back, review-grid jump) adds to that question's cumulative total.
+- Module pause freezes the clock for all questions; resumed time accrues to whichever question is active.
+- Time is stored as whole seconds on each `test_attempt_questions` row and survives refresh mid-module.
+- Flushing uses the same background-save pattern as answers (navigation, unload, end-of-module).
+
 **Story 3.3: Countdown timer**
 *As a user, I want a per-module countdown timer that I can hide/reveal, with auto-submit when time expires, so that pacing pressure matches the real test.*
 
@@ -270,6 +282,7 @@ Organized as epics, each broken into independently implementable user stories wi
 **Story 5.4: Full answer review**
 *As a user, I want to review every question after submitting, with my answer, the correct answer, and the rationale, so that I can learn from mistakes.*
 - Any recycled ("seen before") questions are visibly flagged in this view.
+- Each question shows time spent (e.g. "2m 15s"), so pacing patterns are visible alongside correctness.
 
 ---
 
@@ -283,6 +296,10 @@ Organized as epics, each broken into independently implementable user stories wi
 
 **Story 6.3: Drill session summary**
 *As a user, I want a short summary at the end of a drill session (accuracy, questions covered), so that I know how the session went.*
+
+**Story 6.4: Drill per-question time**
+*As a user practicing in drill mode, I want time-on-question tracked the same way as in a full test, so that pacing data is consistent across modes.*
+- Same active-view rules as Story 3.7; stored on `drill_session_questions`.
 
 ---
 

@@ -42,7 +42,7 @@ import {
   parseSqliteTimestamp,
   type EpochMillis,
 } from "./testFlow";
-import { saveAnswerWithDeadline, setChoiceState, setFlag } from "./questionState";
+import { saveAnswerWithDeadline, setChoiceState, setFlag, addTimeSpent } from "./questionState";
 
 /**
  * Run the whole file outside UTC.
@@ -137,6 +137,7 @@ interface StoredQuestionRow {
   flagged: number;
   crossed_out_choices: string | null;
   highlights: string | null;
+  time_spent_seconds: number;
 }
 
 function readRow(
@@ -147,7 +148,7 @@ function readRow(
 ): StoredQuestionRow {
   return db
     .prepare(
-      `SELECT user_answer, is_correct, flagged, crossed_out_choices, highlights
+      `SELECT user_answer, is_correct, flagged, crossed_out_choices, highlights, time_spent_seconds
        FROM test_attempt_questions
        WHERE attempt_id = ? AND question_id = ? AND module = ?`,
     )
@@ -581,4 +582,47 @@ test("writes are scoped to one attempt, not to a question id", () => {
     .prepare("SELECT rw_module1_started_at AS startedAt FROM test_attempts WHERE id = ?")
     .get(otherAttemptId) as { startedAt: string };
   assert.equal(parseSqliteTimestamp(stamp.startedAt), MODULE_START);
+});
+
+// ---------------------------------------------------------------------------
+// Story 3.7 -- per-question time tracking
+// ---------------------------------------------------------------------------
+
+test("addTimeSpent accumulates seconds on the served row", () => {
+  const { db, attemptId, rw } = attemptWithRunningRwModule1();
+  const questionId = rw[0].question.id;
+
+  addTimeSpent(db, attemptId, "rw", 1, questionId, 12);
+  addTimeSpent(db, attemptId, "rw", 1, questionId, 8);
+
+  assert.equal(readRow(db, attemptId, questionId).time_spent_seconds, 20);
+});
+
+test("addTimeSpent is not deadline-checked", () => {
+  const { db, attemptId, rw } = attemptWithRunningRwModule1();
+  const questionId = rw[0].question.id;
+
+  // Module is long expired; time still persists (unlike answers).
+  saveAnswerWithDeadline(db, attemptId, "rw", 1, questionId, "A", RW_DEADLINE + 60_000);
+  addTimeSpent(db, attemptId, "rw", 1, questionId, 5);
+
+  assert.equal(readRow(db, attemptId, questionId).time_spent_seconds, 5);
+  assert.equal(readRow(db, attemptId, questionId).user_answer, null);
+});
+
+test("addTimeSpent rejects non-positive deltas", () => {
+  const { db, attemptId, rw } = attemptWithRunningRwModule1();
+  const questionId = rw[0].question.id;
+
+  assert.throws(() => addTimeSpent(db, attemptId, "rw", 1, questionId, 0), /positive integer/);
+  assert.throws(() => addTimeSpent(db, attemptId, "rw", 1, questionId, -3), /positive integer/);
+});
+
+test("addTimeSpent rejects an unserved question", () => {
+  const { db, attemptId } = attemptWithRunningRwModule1();
+
+  assert.throws(
+    () => addTimeSpent(db, attemptId, "rw", 1, "no-such-question", 10),
+    /is not part of attempt/,
+  );
 });

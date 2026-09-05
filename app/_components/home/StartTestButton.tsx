@@ -43,8 +43,8 @@ export function StartTestButton() {
         </button>
       </div>
       <p className="max-w-md text-xs text-foreground/70">
-        Practice Test 2 uses different questions from Test 1. You can start either test even
-        if another is in progress — resume in-progress tests below.
+        Practice Test 2 prefers questions you have not seen in Test 1. You can start either
+        test even if another is in progress — resume in-progress tests below.
       </p>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>

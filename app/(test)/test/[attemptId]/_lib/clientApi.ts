@@ -38,6 +38,8 @@ export interface QuestionStatePayload {
   crossedOut?: string | null;
   /** Raw JSON text for passage highlight ranges (D4). */
   highlights?: string | null;
+  /** Incremental active-view seconds to add (Story 3.7). */
+  timeSpentDelta?: number;
 }
 
 export async function postQuestionState(
@@ -108,6 +110,20 @@ export async function postResume(attemptId: number): Promise<{ next: string }> {
     headers: { "Content-Type": "application/json" },
   });
   return parseJsonResponse(response);
+}
+
+/** Fire-and-forget save for unload — uses keepalive so the browser may complete it. */
+export function postQuestionStateKeepalive(
+  attemptId: number,
+  questionId: string,
+  payload: QuestionStatePayload,
+): void {
+  void fetch(`/api/attempts/${attemptId}/questions/${questionId}/state`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  });
 }
 
 /** Fire-and-forget save for unload — uses keepalive so the browser may complete it. */

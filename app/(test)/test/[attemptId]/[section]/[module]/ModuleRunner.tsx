@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { postEndModule, postQuestionState } from "../../_lib/clientApi";
 import { useAutosave } from "../../_lib/useAutosave";
 import { useQuestionStateSave } from "../../_lib/useQuestionStateSave";
+import { useQuestionTimeTracker } from "../../_lib/useQuestionTimeTracker";
 import { parseCrossedOutChoices, serializeCrossedOutChoices, toggleCrossedOut } from "@/lib/choiceState";
 import {
   mergeHighlight,
@@ -30,6 +31,9 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   const [timerVisible, setTimerVisible] = useState(true);
   const [expired, setExpired] = useState(false);
 
+  const currentQuestion = questions[currentIndex];
+  const isLastQuestion = currentIndex === questions.length - 1;
+
   const submittingRef = useRef(false);
   const { queueSave, flushAll: flushAnswers } = useAutosave(attemptId, section, module);
   const { saveQuestionState, flushAll: flushQuestionState } = useQuestionStateSave(
@@ -37,14 +41,20 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
     section,
     module,
   );
+  const { flushAll: flushQuestionTime } = useQuestionTimeTracker(
+    attemptId,
+    section,
+    module,
+    currentQuestion?.id,
+    timer.paused ?? false,
+    expired,
+  );
 
   const flushAll = useCallback(async () => {
+    await flushQuestionTime();
     await flushAnswers();
     await flushQuestionState();
-  }, [flushAnswers, flushQuestionState]);
-
-  const currentQuestion = questions[currentIndex];
-  const isLastQuestion = currentIndex === questions.length - 1;
+  }, [flushAnswers, flushQuestionState, flushQuestionTime]);
 
   const updateQuestion = useCallback((questionId: string, patch: Partial<RunnerQuestion>) => {
     setQuestions((prev) =>

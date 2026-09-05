@@ -18,6 +18,7 @@ export const RW_MC_QUESTION: RunnerQuestion = {
   flagged: false,
   crossedOutChoices: '["A"]',
   highlights: null,
+  timeSpentSeconds: 0,
 };
 
 export const RW_PASSAGE: RunnerQuestion = {
@@ -43,6 +44,7 @@ export const MATH_MC_QUESTION: RunnerQuestion = {
   flagged: true,
   crossedOutChoices: null,
   highlights: null,
+  timeSpentSeconds: 0,
 };
 
 export const MATH_GRID_IN_QUESTION: RunnerQuestion = {
@@ -57,4 +59,5 @@ export const MATH_GRID_IN_QUESTION: RunnerQuestion = {
   flagged: false,
   crossedOutChoices: null,
   highlights: null,
+  timeSpentSeconds: 0,
 };

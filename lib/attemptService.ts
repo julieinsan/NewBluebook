@@ -101,6 +101,8 @@ export interface QuestionSavedState {
   crossedOutChoices: string | null;
   /** Raw JSON text from `highlights`; unparsed on purpose (see above). */
   highlights: string | null;
+  /** Cumulative seconds on this question while it was the active runner view (Story 3.7). */
+  timeSpentSeconds: number;
 }
 
 /**
@@ -119,6 +121,7 @@ const FRESHLY_INSERTED_STATE: QuestionSavedState = {
   flagged: false,
   crossedOutChoices: null,
   highlights: null,
+  timeSpentSeconds: 0,
 };
 
 export interface AssembledModuleQuestion {
@@ -461,6 +464,7 @@ export function readModuleQuestions(
          taq.flagged AS flagged,
          taq.crossed_out_choices AS crossed_out_choices,
          taq.highlights AS highlights,
+         taq.time_spent_seconds AS time_spent_seconds,
          CASE WHEN own_serve.min_id IS NULL THEN
            EXISTS (
              SELECT 1 FROM question_serve_log sl
@@ -485,6 +489,7 @@ export function readModuleQuestions(
     flagged: number;
     crossed_out_choices: string | null;
     highlights: string | null;
+    time_spent_seconds: number;
   })[];
 
   return rows.map((row) => {
@@ -495,6 +500,7 @@ export function readModuleQuestions(
       flagged,
       crossed_out_choices,
       highlights,
+      time_spent_seconds,
       ...question
     } = row;
     return {
@@ -505,6 +511,7 @@ export function readModuleQuestions(
         flagged: flagged === 1,
         crossedOutChoices: crossed_out_choices,
         highlights,
+        timeSpentSeconds: time_spent_seconds,
       },
     };
   });

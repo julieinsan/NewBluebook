@@ -1,18 +1,8 @@
 import { startNewAttempt, type PracticeTest } from "@/lib/attemptService";
 import { getDb } from "@/lib/db";
+import { parsePracticeTest } from "@/lib/practiceTest";
 import { moduleStartedAtColumn, runnerPath } from "@/lib/testFlow";
 import { jsonResponse, handleRouteError } from "./_helpers";
-
-function parsePracticeTest(body: unknown): PracticeTest {
-  if (body == null || typeof body !== "object") {
-    return 1;
-  }
-  const value = (body as { practiceTest?: unknown }).practiceTest;
-  if (value === 1 || value === 2) {
-    return value;
-  }
-  throw new Error("practiceTest must be 1 or 2");
-}
 
 /**
  * POST /api/attempts — start a new practice test (D9′).

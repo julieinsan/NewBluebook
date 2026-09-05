@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import { runMigrations } from "./migrations";
 import { BLUEPRINT, type Section } from "./blueprint";
+import { splitByDifficulty, MODULE1_DIFFICULTY_MIX } from "./moduleAssembly";
 import {
   startNewAttempt,
   saveAnswer,
@@ -46,6 +47,33 @@ function makeTestDb(): Database.Database {
     for (const { domain } of BLUEPRINT[section].domains) {
       for (const difficulty of ["easy", "medium", "hard"] as const) {
         for (let i = 0; i < PER_BUCKET; i++) {
+          insert.run(`${section}-${domain}-${difficulty}-${i}`, section, domain, difficulty);
+        }
+      }
+    }
+  }
+
+  return db;
+}
+
+/** Minimum per-(domain, difficulty) supply — exactly one Module 1 worth per section. */
+function makeTightTestDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  runMigrations(db);
+
+  const insert = db.prepare(
+    `INSERT INTO questions
+      (id, section, domain, skill, difficulty, question_type, stimulus_text,
+       choice_a, choice_b, choice_c, choice_d, correct_answer, rationale)
+     VALUES (?, ?, ?, 'stub skill', ?, 'mc', 'stub stimulus', 'a', 'b', 'c', 'd', 'A', 'stub rationale')`,
+  );
+
+  for (const section of ["rw", "math"] as Section[]) {
+    for (const { domain, module1 } of BLUEPRINT[section].domains) {
+      const targets = splitByDifficulty(module1, MODULE1_DIFFICULTY_MIX);
+      for (const difficulty of ["easy", "medium", "hard"] as const) {
+        for (let i = 0; i < targets[difficulty]; i++) {
           insert.run(`${section}-${domain}-${difficulty}-${i}`, section, domain, difficulty);
         }
       }
@@ -258,7 +286,7 @@ test("a failed Module 2 assembly rolls back its routing path and serve-log rows"
   assert.equal(path.p, null, "the routing path written before the failure must roll back");
 });
 
-test("Practice Test 2 prefers fresh questions over Practice Test 1 when the bank allows", () => {
+test("Practice Test 2 has no overlap with Test 1 when the bank has spare capacity", () => {
   const db = makeTestDb();
 
   const test1 = startNewAttempt(db, { practiceTest: 1 });
@@ -287,6 +315,30 @@ test("Practice Test 2 prefers fresh questions over Practice Test 1 when the bank
   );
 });
 
+test("Practice Test 2 relaxes Test 1 exclusion when the fresh pool is exhausted", () => {
+  const db = makeTightTestDb();
+
+  const test1 = startNewAttempt(db, { practiceTest: 1 });
+  const test1QuestionIds = new Set([
+    ...test1.rw.map((q) => q.question.id),
+    ...test1.math.map((q) => q.question.id),
+  ]);
+
+  const test2 = startNewAttempt(db, { practiceTest: 2 });
+  const test2QuestionIds = [
+    ...test2.rw.map((q) => q.question.id),
+    ...test2.math.map((q) => q.question.id),
+  ];
+
+  assert.equal(test2.rw.length, test1.rw.length);
+  assert.equal(test2.math.length, test1.math.length);
+
+  assert.ok(
+    test2QuestionIds.some((id) => test1QuestionIds.has(id)),
+    "Test 2 must recycle Test 1 questions when the bank is exactly one Test 1 deep",
+  );
+});
+
 test("readModuleQuestions returns the student's saved work alongside the questions", () => {
   const db = makeTestDb();
   const { attemptId, rw } = startNewAttempt(db);
@@ -300,6 +352,7 @@ test("readModuleQuestions returns the student's saved work alongside the questio
     flagged: false,
     crossedOutChoices: null,
     highlights: null,
+    timeSpentSeconds: 0,
   });
   assert.deepEqual(
     rw.map((q) => q.state),
@@ -326,6 +379,7 @@ test("readModuleQuestions returns the student's saved work alongside the questio
     // Carried as raw JSON text on purpose: Epic 4 owns the parsed shape.
     crossedOutChoices: '["A","B"]',
     highlights: '[{"start":0,"end":9}]',
+    timeSpentSeconds: 0,
   });
 
   // Untouched rows stay untouched, and order_index order is preserved.

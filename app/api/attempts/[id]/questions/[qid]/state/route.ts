@@ -1,4 +1,4 @@
-import { setChoiceState, setFlag } from "@/lib/questionState";
+import { setChoiceState, setFlag, addTimeSpent } from "@/lib/questionState";
 import { getDb } from "@/lib/db";
 import {
   errorResponse,
@@ -29,7 +29,7 @@ export async function POST(
       return errorResponse("Invalid JSON body", 400);
     }
 
-    const { section, module, flagged, crossedOut, highlights } = body;
+    const { section, module, flagged, crossedOut, highlights, timeSpentDelta } = body;
     if (!isSection(section) || !isModuleNumber(module)) {
       return errorResponse('Body must include section ("rw" | "math") and module (1 | 2)', 400);
     }
@@ -38,9 +38,13 @@ export async function POST(
     const hasFlag = "flagged" in body;
     const hasCrossedOut = "crossedOut" in body;
     const hasHighlights = "highlights" in body;
+    const hasTimeSpentDelta = "timeSpentDelta" in body;
 
-    if (!hasFlag && !hasCrossedOut && !hasHighlights) {
-      return errorResponse("Body must include at least one of flagged, crossedOut, highlights", 400);
+    if (!hasFlag && !hasCrossedOut && !hasHighlights && !hasTimeSpentDelta) {
+      return errorResponse(
+        "Body must include at least one of flagged, crossedOut, highlights, timeSpentDelta",
+        400,
+      );
     }
 
     if (hasFlag) {
@@ -65,6 +69,17 @@ export async function POST(
         update.highlights = highlights ?? null;
       }
       setChoiceState(db, attemptId, section, module, questionId, update);
+    }
+
+    if (hasTimeSpentDelta) {
+      if (
+        typeof timeSpentDelta !== "number" ||
+        !Number.isInteger(timeSpentDelta) ||
+        timeSpentDelta <= 0
+      ) {
+        return errorResponse("timeSpentDelta must be a positive integer", 400);
+      }
+      addTimeSpent(db, attemptId, section, module, questionId, timeSpentDelta);
     }
 
     return jsonResponse({ ok: true });
