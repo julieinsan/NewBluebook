@@ -1,5 +1,9 @@
 import type { ModulePosition } from "@/lib/testFlow";
 
+export function practiceTestLabel(practiceTest: 1 | 2): string {
+  return practiceTest === 1 ? "Practice Test 1" : "Practice Test 2";
+}
+
 export function positionLabel(position: ModulePosition, isPaused = false): string {
   let base: string;
   switch (position.kind) {

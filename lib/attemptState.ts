@@ -411,6 +411,8 @@ export function getRunnerModule(
  */
 export interface AttemptSummary {
   attemptId: number;
+  /** Practice Test 1 (first-pass) or 2 (second-pass, excludes Test 1 questions). */
+  practiceTest: 1 | 2;
   /** `test_attempts.status` -- what Epics 5/7 filter on. Not what routing uses (D10). */
   status: AttemptStatus;
   /** When the attempt row was created, not when R&W Module 1 began. */
@@ -457,17 +459,18 @@ export interface AttemptSummary {
 export function listAttempts(db: Database.Database): AttemptSummary[] {
   const rows = db
     .prepare(
-      `SELECT ${ATTEMPT_FLOW_COLUMNS}, total_scaled_score
+      `SELECT ${ATTEMPT_FLOW_COLUMNS}, practice_test, total_scaled_score
        FROM test_attempts
        ORDER BY id DESC`,
     )
-    .all() as (AttemptFlowRow & { total_scaled_score: number | null })[];
+    .all() as (AttemptFlowRow & { practice_test: 1 | 2; total_scaled_score: number | null })[];
 
   return rows.map((row) => {
     const state = attemptStateFromRow(row);
     const position = resolveCurrentPosition(state);
     return {
       attemptId: state.attemptId,
+      practiceTest: row.practice_test,
       status: state.status,
       startedAt: state.startedAt,
       submittedAt: state.submittedAt,

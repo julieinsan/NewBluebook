@@ -142,6 +142,12 @@ interface AssembleParams {
    * repeat outright.
    */
   excludeIds?: string[];
+  /**
+   * Question IDs to avoid when fresher alternatives exist (Practice Test 2 vs Test 1).
+   * Applied on the first pass per difficulty bucket; if still short after difficulty
+   * fallback, selection retries without these IDs so PRD §3.3 recycling can fill gaps.
+   */
+  preferFreshExcludeIds?: string[];
 }
 
 /**
@@ -153,7 +159,14 @@ interface AssembleParams {
  */
 export function assembleModuleForSection(
   db: Database.Database,
-  { section, module, mix, attemptId, excludeIds: hardExcludeIds = [] }: AssembleParams,
+  {
+    section,
+    module,
+    mix,
+    attemptId,
+    excludeIds: hardExcludeIds = [],
+    preferFreshExcludeIds = [],
+  }: AssembleParams,
 ): SelectedQuestion[] {
   const blueprint = getSectionBlueprint(section);
   const results: SelectedQuestion[] = [];
@@ -161,27 +174,38 @@ export function assembleModuleForSection(
   for (const domainBlueprint of blueprint.domains) {
     const domainCount = module === 1 ? domainBlueprint.module1 : domainBlueprint.module2;
     const targets = splitByDifficulty(domainCount, mix);
-    const excludeIds: string[] = [...hardExcludeIds, ...results.map((q) => q.id)];
+
+    const buildExcludeIds = (includePreferFresh: boolean): string[] => [
+      ...hardExcludeIds,
+      ...(includePreferFresh ? preferFreshExcludeIds : []),
+      ...results.map((q) => q.id),
+    ];
 
     for (const targetDifficulty of ["easy", "medium", "hard"] as const) {
       let remaining = targets[targetDifficulty];
       if (remaining <= 0) continue;
 
-      for (const fallbackDifficulty of FALLBACK_ORDER[targetDifficulty]) {
-        if (remaining <= 0) break;
+      const fillBucket = (includePreferFresh: boolean): void => {
+        for (const fallbackDifficulty of FALLBACK_ORDER[targetDifficulty]) {
+          if (remaining <= 0) break;
 
-        const got = selectQuestions(db, {
-          section,
-          domain: domainBlueprint.domain,
-          difficulty: fallbackDifficulty,
-          count: remaining,
-          attemptId,
-          excludeIds,
-        });
+          const got = selectQuestions(db, {
+            section,
+            domain: domainBlueprint.domain,
+            difficulty: fallbackDifficulty,
+            count: remaining,
+            attemptId,
+            excludeIds: buildExcludeIds(includePreferFresh),
+          });
 
-        results.push(...got);
-        excludeIds.push(...got.map((q) => q.id));
-        remaining -= got.length;
+          results.push(...got);
+          remaining -= got.length;
+        }
+      };
+
+      fillBucket(true);
+      if (remaining > 0 && preferFreshExcludeIds.length > 0) {
+        fillBucket(false);
       }
 
       if (remaining > 0) {
@@ -199,11 +223,19 @@ export function assembleModuleForSection(
 }
 
 /** Story 2.3: assembles Module 1 (fixed, moderate mix) for a section. */
-export function assembleModule1(db: Database.Database, section: Section, attemptId: number): SelectedQuestion[] {
+export function assembleModule1(
+  db: Database.Database,
+  section: Section,
+  attemptId: number,
+  excludeIds: string[] = [],
+  preferFreshExcludeIds: string[] = [],
+): SelectedQuestion[] {
   return assembleModuleForSection(db, {
     section,
     module: 1,
     mix: MODULE1_DIFFICULTY_MIX,
     attemptId,
+    excludeIds,
+    preferFreshExcludeIds,
   });
 }

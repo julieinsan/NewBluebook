@@ -258,6 +258,35 @@ test("a failed Module 2 assembly rolls back its routing path and serve-log rows"
   assert.equal(path.p, null, "the routing path written before the failure must roll back");
 });
 
+test("Practice Test 2 prefers fresh questions over Practice Test 1 when the bank allows", () => {
+  const db = makeTestDb();
+
+  const test1 = startNewAttempt(db, { practiceTest: 1 });
+  const test1QuestionIds = new Set([
+    ...test1.rw.map((q) => q.question.id),
+    ...test1.math.map((q) => q.question.id),
+  ]);
+
+  const test2 = startNewAttempt(db, { practiceTest: 2 });
+  const test2QuestionIds = [
+    ...test2.rw.map((q) => q.question.id),
+    ...test2.math.map((q) => q.question.id),
+  ];
+
+  for (const id of test2QuestionIds) {
+    assert.equal(
+      test1QuestionIds.has(id),
+      false,
+      `Test 2 must not reuse Test 1 question ${id}`,
+    );
+  }
+
+  assert.deepEqual(
+    db.prepare("SELECT practice_test FROM test_attempts WHERE id = ?").get(test2.attemptId),
+    { practice_test: 2 },
+  );
+});
+
 test("readModuleQuestions returns the student's saved work alongside the questions", () => {
   const db = makeTestDb();
   const { attemptId, rw } = startNewAttempt(db);

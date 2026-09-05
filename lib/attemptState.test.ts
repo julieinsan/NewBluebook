@@ -625,11 +625,13 @@ test("listAttempts distinguishes the resumable attempt from finished ones", () =
   );
 
   const [current, past] = attempts;
+  assert.equal(current.practiceTest, 1);
   assert.equal(current.resumable, true);
   assert.equal(current.status, "in_progress");
   assert.deepEqual(current.position, { kind: "module", section: "rw", module: 2 });
   assert.equal(current.path, runnerPath(active, "rw", 2), "the row deep-links to its module");
 
+  assert.equal(past.practiceTest, 1);
   assert.equal(past.resumable, false);
   assert.equal(past.status, "submitted");
   assert.deepEqual(past.position, { kind: "submitted" });
@@ -639,8 +641,25 @@ test("listAttempts distinguishes the resumable attempt from finished ones", () =
   assert.equal(
     attempts.filter((a) => a.resumable).length,
     1,
-    "D9's invariant: at most one attempt is resumable at a time",
+    "only the in-progress attempt is resumable after one is submitted",
   );
+});
+
+test("listAttempts allows multiple resumable in-progress attempts", () => {
+  const db = makeTestDb();
+
+  const first = startNewAttempt(db, { practiceTest: 1 }).attemptId;
+  startModule(db, first, "rw", 1);
+
+  const second = startNewAttempt(db, { practiceTest: 2 }).attemptId;
+  startModule(db, second, "rw", 1);
+
+  const attempts = listAttempts(db);
+  const resumable = attempts.filter((a) => a.resumable);
+
+  assert.equal(resumable.length, 2);
+  assert.equal(resumable.find((a) => a.attemptId === first)?.practiceTest, 1);
+  assert.equal(resumable.find((a) => a.attemptId === second)?.practiceTest, 2);
 });
 
 test("listAttempts marks an attempt in the D10 window as not resumable", () => {

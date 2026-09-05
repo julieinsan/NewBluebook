@@ -81,12 +81,16 @@ export async function postSubmit(attemptId: number): Promise<{ ok: boolean }> {
   return parseJsonResponse(response);
 }
 
-export async function postStartAttempt(): Promise<{
+export async function postStartAttempt(practiceTest: 1 | 2 = 1): Promise<{
   attemptId: number;
-  reused: boolean;
+  practiceTest: 1 | 2;
   next: string;
 }> {
-  const response = await fetch("/api/attempts", { method: "POST" });
+  const response = await fetch("/api/attempts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ practiceTest }),
+  });
   return parseJsonResponse(response);
 }
 

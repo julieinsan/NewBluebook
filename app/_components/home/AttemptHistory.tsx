@@ -1,6 +1,6 @@
 import type { AttemptSummary } from "@/lib/attemptState";
 import Link from "next/link";
-import { formatAttemptStartedAt, positionLabel } from "./positionLabel";
+import { formatAttemptStartedAt, positionLabel, practiceTestLabel } from "./positionLabel";
 import { ResumeButton } from "./ResumeButton";
 
 export interface AttemptHistoryProps {
@@ -23,7 +23,7 @@ function resumeControl(attempt: AttemptSummary, className: string, label: string
 }
 
 export function AttemptHistory({ attempts }: AttemptHistoryProps) {
-  const resumable = attempts.find((attempt) => attempt.resumable);
+  const resumableAttempts = attempts.filter((attempt) => attempt.resumable);
 
   if (attempts.length === 0) {
     return (
@@ -35,20 +35,33 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
 
   return (
     <div className="flex w-full max-w-lg flex-col gap-6">
-      {resumable && (
+      {resumableAttempts.length > 0 && (
         <section className="rounded-lg border border-accent/30 bg-accent/5 p-4 text-left">
-          <h2 className="text-sm font-semibold">
-            {resumable.isPaused ? "Paused test" : "Resume in progress"}
-          </h2>
-          <p className="mt-1 text-sm text-foreground/80">
-            {positionLabel(resumable.position, resumable.isPaused)} · started{" "}
-            {formatAttemptStartedAt(resumable.startedAt)}
-          </p>
-          {resumeControl(
-            resumable,
-            "mt-3 inline-block rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground",
-            resumable.isPaused ? "Resume test" : "Resume test",
-          )}
+          <h2 className="text-sm font-semibold">In progress</h2>
+          <ul className="mt-3 flex flex-col gap-3">
+            {resumableAttempts.map((attempt) => (
+              <li
+                key={attempt.attemptId}
+                className="flex flex-col gap-2 border-t border-accent/20 pt-3 first:border-t-0 first:pt-0"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    {practiceTestLabel(attempt.practiceTest)}
+                    {attempt.isPaused ? " · Paused" : ""}
+                  </p>
+                  <p className="text-sm text-foreground/80">
+                    {positionLabel(attempt.position, attempt.isPaused)} · started{" "}
+                    {formatAttemptStartedAt(attempt.startedAt)}
+                  </p>
+                </div>
+                {resumeControl(
+                  attempt,
+                  "inline-block w-fit rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground",
+                  attempt.isPaused ? "Resume test" : "Resume test",
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -58,7 +71,9 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
           {attempts.map((attempt) => (
             <li key={attempt.attemptId} className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium">Attempt #{attempt.attemptId}</p>
+                <p className="text-sm font-medium">
+                  {practiceTestLabel(attempt.practiceTest)} · Attempt #{attempt.attemptId}
+                </p>
                 <p className="text-xs text-foreground/70">
                   {formatAttemptStartedAt(attempt.startedAt)} ·{" "}
                   {positionLabel(attempt.position, attempt.isPaused)}

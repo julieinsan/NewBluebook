@@ -134,8 +134,28 @@ export interface AssembledModuleQuestion {
 
 export interface NewAttemptResult {
   attemptId: number;
+  practiceTest: PracticeTest;
   rw: AssembledModuleQuestion[];
   math: AssembledModuleQuestion[];
+}
+
+export type PracticeTest = 1 | 2;
+
+export interface StartNewAttemptOptions {
+  practiceTest?: PracticeTest;
+}
+
+/** All question IDs assigned to any Practice Test 1 attempt (for Test 2 exclusion). */
+export function getPracticeTest1QuestionIds(db: Database.Database): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT taq.question_id AS question_id
+       FROM test_attempt_questions taq
+       JOIN test_attempts ta ON ta.id = taq.attempt_id
+       WHERE ta.practice_test = 1`,
+    )
+    .all() as { question_id: string }[];
+  return rows.map((row) => row.question_id);
 }
 
 export interface AnswerSubmission {
@@ -193,18 +213,24 @@ function insertModuleQuestions(
  * `question_serve_log` entries all roll back, rather than leaving a half-built attempt
  * behind and burning serve-log freshness on questions nobody ever saw.
  */
-export function startNewAttempt(db: Database.Database = getDb()): NewAttemptResult {
+export function startNewAttempt(
+  db: Database.Database = getDb(),
+  options: StartNewAttemptOptions = {},
+): NewAttemptResult {
+  const practiceTest = options.practiceTest ?? 1;
+  const test1ExcludeIds = practiceTest === 2 ? getPracticeTest1QuestionIds(db) : [];
+
   const run = db.transaction((): NewAttemptResult => {
-    const info = db.prepare("INSERT INTO test_attempts DEFAULT VALUES").run();
+    const info = db.prepare("INSERT INTO test_attempts (practice_test) VALUES (?)").run(practiceTest);
     const attemptId = info.lastInsertRowid as number;
 
-    const rwQuestions = assembleModule1(db, "rw", attemptId);
+    const rwQuestions = assembleModule1(db, "rw", attemptId, [], test1ExcludeIds);
     const rw = insertModuleQuestions(db, attemptId, "rw", 1, rwQuestions);
 
-    const mathQuestions = assembleModule1(db, "math", attemptId);
+    const mathQuestions = assembleModule1(db, "math", attemptId, [], test1ExcludeIds);
     const math = insertModuleQuestions(db, attemptId, "math", 1, mathQuestions);
 
-    return { attemptId, rw, math };
+    return { attemptId, practiceTest, rw, math };
   });
 
   return run();
@@ -516,10 +542,12 @@ export function assembleModule2ForSection(
   const run = db.transaction((): Module2Result => {
     const attempt = db
       .prepare(
-        `SELECT ${submittedAtColumn} AS module1SubmittedAt, ${pathColumn} AS storedPath
+        `SELECT ${submittedAtColumn} AS module1SubmittedAt, ${pathColumn} AS storedPath, practice_test AS practiceTest
          FROM test_attempts WHERE id = ?`,
       )
-      .get(attemptId) as { module1SubmittedAt: string | null; storedPath: string | null } | undefined;
+      .get(attemptId) as
+      | { module1SubmittedAt: string | null; storedPath: string | null; practiceTest: PracticeTest }
+      | undefined;
 
     if (!attempt) {
       throw new Error(`Attempt ${attemptId} does not exist`);
@@ -561,6 +589,9 @@ export function assembleModule2ForSection(
       .prepare("SELECT question_id FROM test_attempt_questions WHERE attempt_id = ? AND section = ?")
       .all(attemptId, section) as { question_id: string }[];
 
+    const test1ExcludeIds =
+      attempt.practiceTest === 2 ? getPracticeTest1QuestionIds(db) : [];
+
     const mix = MODULE2_DIFFICULTY_MIX[score.path as DifficultyPath];
     const module2Questions = assembleModuleForSection(db, {
       section,
@@ -568,6 +599,7 @@ export function assembleModule2ForSection(
       mix,
       attemptId,
       excludeIds: alreadyUsed.map((r) => r.question_id),
+      preferFreshExcludeIds: test1ExcludeIds,
     });
     const questions = insertModuleQuestions(db, attemptId, section, 2, module2Questions);
 

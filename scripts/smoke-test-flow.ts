@@ -83,23 +83,18 @@ function answerModule(
   });
 }
 
-/** Mirrors POST /api/attempts. */
-function startOrResumeAttempt(db: ReturnType<typeof getDb>): {
+/** Mirrors POST /api/attempts (D9′): always create a new attempt and stamp R&W M1. */
+function startAttempt(db: ReturnType<typeof getDb>, practiceTest: 1 | 2 = 1): {
   attemptId: number;
-  reused: boolean;
+  practiceTest: 1 | 2;
 } {
-  const existing = listAttempts(db).find((attempt) => attempt.resumable);
-  if (existing) {
-    return { attemptId: existing.attemptId, reused: true };
-  }
-
-  const { attemptId } = startNewAttempt(db);
+  const { attemptId, practiceTest: pt } = startNewAttempt(db, { practiceTest });
   const column = moduleStartedAtColumn("rw", 1);
   db.prepare(
     `UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ? AND ${column} IS NULL`,
   ).run(attemptId);
 
-  return { attemptId, reused: false };
+  return { attemptId, practiceTest: pt };
 }
 
 function main() {
@@ -109,20 +104,19 @@ function main() {
   if (preExistingResumables.length > 0) {
     console.log(
       `NOTE: ${preExistingResumables.length} in-progress attempt(s) already in DB ` +
-        `(ids: ${preExistingResumables.map((a) => a.attemptId).join(", ")}) — ` +
-        `D9 checks skipped (covered by lib/testFlowLifecycle.test.ts)`,
+        `(ids: ${preExistingResumables.map((a) => a.attemptId).join(", ")})`,
     );
   }
-  const skipD9 = preExistingResumables.length > 0;
 
   console.log("\n=== Start new attempt (fresh row for deterministic smoke) ===");
-  const { attemptId } = startNewAttempt(db);
+  const { attemptId, practiceTest } = startNewAttempt(db, { practiceTest: 1 });
   const column = moduleStartedAtColumn("rw", 1);
   db.prepare(
     `UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ? AND ${column} IS NULL`,
   ).run(attemptId);
   console.log(`attemptId = ${attemptId}`);
   check("startNewAttempt returns a positive attempt id", attemptId > 0);
+  check("practice test defaults to 1", practiceTest === 1);
 
   console.log("\n=== Module 1 question counts ===");
   for (const section of ["rw", "math"] as Section[]) {
@@ -278,20 +272,14 @@ function main() {
     ),
   );
 
-  console.log("\n=== Double-start idempotence (D9) ===");
-  if (skipD9) {
-    console.log("  SKIP D9 smoke — pre-existing in-progress attempts in DB");
-  } else {
-    const d9First = startOrResumeAttempt(db);
-    check("after submit, start creates a new in-progress attempt", !d9First.reused);
-    const d9Second = startOrResumeAttempt(db);
-    check("immediate second start reuses that attempt (D9)", d9Second.reused);
-    check(
-      "D9 returns the same attemptId twice",
-      d9Second.attemptId === d9First.attemptId,
-      `got ${d9Second.attemptId} vs ${d9First.attemptId}`,
-    );
-  }
+  console.log("\n=== Multi-start while in progress (D9′) ===");
+  const d9First = startAttempt(db, 1);
+  const d9Second = startAttempt(db, 2);
+  check("second start creates a new attempt while first is in progress", d9Second.attemptId !== d9First.attemptId);
+  check(
+    "both in-progress attempts are resumable",
+    listAttempts(db).filter((a) => a.resumable).length >= 2,
+  );
 
   console.log(`\n=== Result: ${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`} ===`);
   process.exit(failures === 0 ? 0 : 1);

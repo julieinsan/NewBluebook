@@ -5,7 +5,7 @@
  * `questionState.test.ts` each pin one concern, this file drives the whole attempt
  * start→submit path as the runner and route handlers actually compose it — module counts,
  * double delivery at both section boundaries, expired-module behaviour, break stamping,
- * resume-after-refresh position, and D9's double-start idempotence.
+ * resume-after-refresh position, and D9′ multi-start behavior.
  *
  * Uses an in-memory SQLite DB built from the real migration files; nothing here touches
  * `data/bluebook.db`.
@@ -116,28 +116,18 @@ function answerModule1(
   });
 }
 
-/** Mirrors POST /api/attempts: create or reuse the in-progress attempt and stamp R&W M1. */
-function startOrResumeAttempt(db: Database.Database): {
+/** Mirrors POST /api/attempts (D9′): always create a new attempt and stamp R&W M1. */
+function startAttempt(
+  db: Database.Database,
+  practiceTest: 1 | 2 = 1,
+): {
   attemptId: number;
-  reused: boolean;
+  practiceTest: 1 | 2;
   next: string;
   rw: AssembledModuleQuestion[];
   math: AssembledModuleQuestion[];
 } {
-  const existing = listAttempts(db).find((attempt) => attempt.resumable);
-  if (existing) {
-    const rw = readModuleQuestions(db, existing.attemptId, "rw", 1);
-    const math = readModuleQuestions(db, existing.attemptId, "math", 1);
-    return {
-      attemptId: existing.attemptId,
-      reused: true,
-      next: existing.path,
-      rw,
-      math,
-    };
-  }
-
-  const { attemptId, rw, math } = startNewAttempt(db);
+  const { attemptId, practiceTest: pt, rw, math } = startNewAttempt(db, { practiceTest });
   const column = moduleStartedAtColumn("rw", 1);
   db.prepare(
     `UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ? AND ${column} IS NULL`,
@@ -145,7 +135,7 @@ function startOrResumeAttempt(db: Database.Database): {
 
   return {
     attemptId,
-    reused: false,
+    practiceTest: pt,
     next: runnerPath(attemptId, "rw", 1),
     rw,
     math,
@@ -182,7 +172,7 @@ function assertModuleCounts(
 
 test("full attempt lifecycle from start through submit has 27/22 questions per module", () => {
   const db = makeTestDb();
-  const { attemptId, rw, math } = startOrResumeAttempt(db);
+  const { attemptId, rw, math } = startAttempt(db);
 
   assertModuleCounts(db, attemptId, "rw", 1, MODULE1_COUNT.rw);
   assertModuleCounts(db, attemptId, "math", 1, MODULE1_COUNT.math);
@@ -232,7 +222,7 @@ test("full attempt lifecycle from start through submit has 27/22 questions per m
 for (const section of ["rw", "math"] as Section[]) {
   test(`double delivery of endModule1 at the ${section} section boundary is safe`, () => {
     const db = makeTestDb();
-    const { attemptId, rw, math } = startOrResumeAttempt(db);
+    const { attemptId, rw, math } = startAttempt(db);
     answerModule1(db, attemptId, "rw", rw, 0.7);
     answerModule1(db, attemptId, "math", math, 0.4);
 
@@ -269,7 +259,7 @@ for (const section of ["rw", "math"] as Section[]) {
 
 test("an expired module rejects late answers but end-module still finalizes it", () => {
   const db = makeTestDb();
-  const { attemptId, rw } = startOrResumeAttempt(db);
+  const { attemptId, rw } = startAttempt(db);
   answerModule1(db, attemptId, "rw", rw, 0.7);
 
   endModule1(db, attemptId, "rw");
@@ -316,7 +306,7 @@ test("an expired module rejects late answers but end-module still finalizes it",
 
 test("break_started_at is stamped when R&W Module 2 ends and Math starts only at endBreak", () => {
   const db = makeTestDb();
-  const { attemptId, rw } = startOrResumeAttempt(db);
+  const { attemptId, rw } = startAttempt(db);
   answerModule1(db, attemptId, "rw", rw, 0.7);
 
   endModule1(db, attemptId, "rw");
@@ -339,7 +329,7 @@ test("break_started_at is stamped when R&W Module 2 ends and Math starts only at
 
 test("resume-after-refresh keeps the same position and module deadline", () => {
   const db = makeTestDb();
-  const { attemptId, rw } = startOrResumeAttempt(db);
+  const { attemptId, rw } = startAttempt(db);
   answerModule1(db, attemptId, "rw", rw, 0.7);
   endModule1(db, attemptId, "rw");
 
@@ -369,32 +359,31 @@ test("resume-after-refresh keeps the same position and module deadline", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Double-start idempotence (D9)
+// Multi-start while in progress (D9′)
 // ---------------------------------------------------------------------------
 
-test("double-start returns the existing in-progress attempt instead of creating a second", () => {
+test("second start creates a new attempt while the first is still in progress", () => {
   const db = makeTestDb();
 
-  const first = startOrResumeAttempt(db);
-  assert.equal(first.reused, false);
+  const first = startAttempt(db, 1);
   assert.equal(first.next, runnerPath(first.attemptId, "rw", 1));
+  assert.equal(first.practiceTest, 1);
 
-  const second = startOrResumeAttempt(db);
-  assert.equal(second.reused, true);
-  assert.equal(second.attemptId, first.attemptId);
-  assert.equal(second.next, first.next);
+  const second = startAttempt(db, 2);
+  assert.notEqual(second.attemptId, first.attemptId);
+  assert.equal(second.practiceTest, 2);
+  assert.equal(second.next, runnerPath(second.attemptId, "rw", 1));
 
   assert.equal(
     countRows(db, "SELECT COUNT(*) c FROM test_attempts WHERE status = 'in_progress'"),
-    1,
-    "D9: at most one in-progress attempt",
+    2,
   );
-  assert.equal(listAttempts(db).filter((a) => a.resumable).length, 1);
+  assert.equal(listAttempts(db).filter((a) => a.resumable).length, 2);
 });
 
 test("a new attempt can start after the previous one is fully submitted", () => {
   const db = makeTestDb();
-  const first = startOrResumeAttempt(db);
+  const first = startAttempt(db);
   answerModule1(db, first.attemptId, "rw", first.rw, 0.7);
   answerModule1(db, first.attemptId, "math", first.math, 0.4);
 
@@ -405,8 +394,7 @@ test("a new attempt can start after the previous one is fully submitted", () => 
   endModule2(db, first.attemptId, "math");
   submitAttempt(db, first.attemptId);
 
-  const second = startOrResumeAttempt(db);
-  assert.equal(second.reused, false);
+  const second = startAttempt(db);
   assert.notEqual(second.attemptId, first.attemptId);
   assert.equal(listAttempts(db).filter((a) => a.resumable).length, 1);
 });

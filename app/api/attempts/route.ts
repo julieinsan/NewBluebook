@@ -1,28 +1,40 @@
-import { listAttempts } from "@/lib/attemptState";
-import { startNewAttempt } from "@/lib/attemptService";
+import { startNewAttempt, type PracticeTest } from "@/lib/attemptService";
 import { getDb } from "@/lib/db";
 import { moduleStartedAtColumn, runnerPath } from "@/lib/testFlow";
 import { jsonResponse, handleRouteError } from "./_helpers";
 
+function parsePracticeTest(body: unknown): PracticeTest {
+  if (body == null || typeof body !== "object") {
+    return 1;
+  }
+  const value = (body as { practiceTest?: unknown }).practiceTest;
+  if (value === 1 || value === 2) {
+    return value;
+  }
+  throw new Error("practiceTest must be 1 or 2");
+}
+
 /**
- * POST /api/attempts — start or resume a test (D9, D3a).
+ * POST /api/attempts — start a new practice test (D9′).
  *
- * Idempotent: returns the existing in-progress attempt if one exists. Otherwise creates
- * a new attempt and stamps `rw_module1_started_at` write-if-null.
+ * Body: `{ practiceTest?: 1 | 2 }` (defaults to 1). Always creates a new attempt and
+ * stamps `rw_module1_started_at` write-if-null.
  */
-export async function POST(): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   try {
-    const db = getDb();
-    const existing = listAttempts(db).find((attempt) => attempt.resumable);
-    if (existing) {
-      return jsonResponse({
-        attemptId: existing.attemptId,
-        reused: true,
-        next: existing.path,
-      });
+    let practiceTest: PracticeTest = 1;
+    try {
+      const body = await request.json();
+      practiceTest = parsePracticeTest(body);
+    } catch (err) {
+      if (err instanceof Error && err.message === "practiceTest must be 1 or 2") {
+        throw err;
+      }
+      // Empty body or invalid JSON — default to Practice Test 1.
     }
 
-    const { attemptId } = startNewAttempt(db);
+    const db = getDb();
+    const { attemptId } = startNewAttempt(db, { practiceTest });
     const column = moduleStartedAtColumn("rw", 1);
     db.prepare(
       `UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ? AND ${column} IS NULL`,
@@ -30,7 +42,7 @@ export async function POST(): Promise<Response> {
 
     return jsonResponse({
       attemptId,
-      reused: false,
+      practiceTest,
       next: runnerPath(attemptId, "rw", 1),
     });
   } catch (err) {
