@@ -25,7 +25,7 @@
  * Usage: `npm run smoke:assembly`
  */
 import { getDb } from "../lib/db";
-import { BLUEPRINT, type Section } from "../lib/blueprint";
+import { BLUEPRINT, moduleQuestionCount, type ModuleNumber, type Section } from "../lib/blueprint";
 import { startNewAttempt, submitModule1Answers, assembleModule2ForSection } from "../lib/attemptService";
 import type { AssembledModuleQuestion } from "../lib/attemptService";
 
@@ -55,6 +55,9 @@ function checkDomainCounts(
   moduleKey: "module1" | "module2",
 ) {
   const counts = countsByDomain(actual);
+  const moduleNumber: ModuleNumber = moduleKey === "module1" ? 1 : 2;
+  const blueprintDomains = new Set(BLUEPRINT[section].domains.map((d) => d.domain));
+
   for (const d of BLUEPRINT[section].domains) {
     const expected = d[moduleKey];
     const got = counts[d.domain] ?? 0;
@@ -64,7 +67,25 @@ function checkDomainCounts(
       `got ${got}`,
     );
   }
-  check(`${label}: total question count = ${actual.length}`, actual.length === Object.values(counts).reduce((a, b) => a + b, 0));
+
+  // Every domain in `counts` should be one this section's blueprint knows about --
+  // catches a stray out-of-blueprint domain that the per-domain loop above (which
+  // only iterates blueprint domains) would never notice.
+  const unexpectedDomains = Object.keys(counts).filter((domain) => !blueprintDomains.has(domain));
+  check(
+    `${label}: no unexpected domains`,
+    unexpectedDomains.length === 0,
+    `unexpected domains: ${unexpectedDomains.join(", ")}`,
+  );
+
+  // Compare against the blueprint's expected total, not a sum re-derived from `actual`
+  // itself (which would trivially always match `actual.length` and could never fail).
+  const expectedTotal = moduleQuestionCount(section, moduleNumber);
+  check(
+    `${label}: total question count = ${actual.length}`,
+    actual.length === expectedTotal,
+    `expected ${expectedTotal}`,
+  );
 }
 
 /**
