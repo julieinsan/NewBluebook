@@ -19,6 +19,18 @@ vi.mock("../../_lib/clientApi", () => ({
   postAnswerKeepalive: vi.fn(),
 }));
 
+vi.mock("@/app/(test)/_components/question/HighlightablePassage", () => ({
+  HighlightablePassage: ({
+    onAddHighlight,
+  }: {
+    onAddHighlight: (range: { start: number; end: number }) => void;
+  }) => (
+    <button type="button" onClick={() => onAddHighlight({ start: 0, end: 9 })}>
+      Add test highlight
+    </button>
+  ),
+}));
+
 function makeRunnerModule(questions = FIXTURE_QUESTIONS): RunnerModule {
   const now = Date.now();
   return {
@@ -90,6 +102,20 @@ test("ModuleRunner toggling cross-out off clears serialized state", async () => 
       section: "rw",
       module: 1,
       crossedOut: null,
+    });
+  });
+});
+
+test("ModuleRunner saves highlight via postQuestionState with serialized JSON", async () => {
+  render(<ModuleRunner runnerModule={makeRunnerModule()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Add test highlight/i }));
+
+  await waitFor(() => {
+    expect(postQuestionState).toHaveBeenCalledWith(42, "q-1", {
+      section: "rw",
+      module: 1,
+      highlights: '[{"start":0,"end":9}]',
     });
   });
 });

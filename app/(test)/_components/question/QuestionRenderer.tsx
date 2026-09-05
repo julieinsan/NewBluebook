@@ -1,6 +1,7 @@
 "use client";
 
 import type { Section } from "@/lib/blueprint";
+import type { HighlightRange } from "@/lib/highlightState";
 import type { RunnerQuestion } from "@/lib/testFlow";
 import { MathQuestionLayout } from "./MathQuestionLayout";
 import { RwQuestionLayout } from "./RwQuestionLayout";
@@ -17,6 +18,9 @@ export interface QuestionRendererProps {
   onToggleFlag?: () => void;
   crossedOutLetters?: Set<string>;
   onToggleCrossOut?: (letter: "A" | "B" | "C" | "D") => void;
+  highlights?: HighlightRange[];
+  onAddHighlight?: (range: HighlightRange) => void;
+  onRemoveHighlight?: (range: HighlightRange) => void;
 }
 
 export function QuestionRenderer({
@@ -30,6 +34,9 @@ export function QuestionRenderer({
   onToggleFlag,
   crossedOutLetters,
   onToggleCrossOut,
+  highlights,
+  onAddHighlight,
+  onRemoveHighlight,
 }: QuestionRendererProps) {
   if (section === "rw") {
     const split = passageText
@@ -46,6 +53,9 @@ export function QuestionRenderer({
         onToggleFlag={onToggleFlag}
         crossedOutLetters={crossedOutLetters}
         onToggleCrossOut={onToggleCrossOut}
+        highlights={highlights}
+        onAddHighlight={onAddHighlight}
+        onRemoveHighlight={onRemoveHighlight}
       />
     );
   }

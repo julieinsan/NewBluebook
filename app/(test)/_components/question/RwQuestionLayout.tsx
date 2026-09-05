@@ -1,7 +1,9 @@
 "use client";
 
 import type { RunnerQuestion } from "@/lib/testFlow";
+import type { HighlightRange } from "@/lib/highlightState";
 import { ChoiceRow } from "../ChoiceRow";
+import { HighlightablePassage } from "./HighlightablePassage";
 import { MarkdownContent } from "./MarkdownContent";
 
 export interface RwQuestionLayoutProps {
@@ -13,6 +15,9 @@ export interface RwQuestionLayoutProps {
   onToggleFlag?: () => void;
   crossedOutLetters?: Set<string>;
   onToggleCrossOut?: (letter: "A" | "B" | "C" | "D") => void;
+  highlights?: HighlightRange[];
+  onAddHighlight?: (range: HighlightRange) => void;
+  onRemoveHighlight?: (range: HighlightRange) => void;
 }
 
 export function RwQuestionLayout({
@@ -24,6 +29,9 @@ export function RwQuestionLayout({
   onToggleFlag,
   crossedOutLetters = new Set(),
   onToggleCrossOut,
+  highlights = [],
+  onAddHighlight,
+  onRemoveHighlight,
 }: RwQuestionLayoutProps) {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-2" data-testid="rw-layout">
@@ -31,9 +39,13 @@ export function RwQuestionLayout({
         className="overflow-y-auto border-b border-foreground/10 p-6 md:border-b-0 md:border-r"
         aria-label="Passage"
       >
-        <MarkdownContent className="prose prose-sm max-w-none leading-relaxed">
-          {passage}
-        </MarkdownContent>
+        <HighlightablePassage
+          passage={passage}
+          highlights={highlights}
+          onAddHighlight={onAddHighlight ?? (() => {})}
+          onRemoveHighlight={onRemoveHighlight ?? (() => {})}
+          className="prose prose-sm max-w-none leading-relaxed"
+        />
       </section>
 
       <section className="overflow-y-auto p-6" aria-label="Question">

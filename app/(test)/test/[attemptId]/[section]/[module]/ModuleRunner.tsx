@@ -10,6 +10,12 @@ import { postEndModule, postQuestionState } from "../../_lib/clientApi";
 import { useAutosave } from "../../_lib/useAutosave";
 import { useQuestionStateSave } from "../../_lib/useQuestionStateSave";
 import { parseCrossedOutChoices, serializeCrossedOutChoices, toggleCrossedOut } from "@/lib/choiceState";
+import {
+  mergeHighlight,
+  parseHighlights,
+  serializeHighlights,
+  type HighlightRange,
+} from "@/lib/highlightState";
 
 export interface ModuleRunnerProps {
   runnerModule: RunnerModule;
@@ -101,6 +107,42 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
     [currentQuestion, expired, saveQuestionState, updateQuestion],
   );
 
+  const handleAddHighlight = useCallback(
+    async (range: HighlightRange) => {
+      if (expired || !currentQuestion) return;
+      const previous = currentQuestion.highlights;
+      const nextHighlights = mergeHighlight(parseHighlights(previous), range);
+      const serialized = serializeHighlights(nextHighlights);
+      updateQuestion(currentQuestion.id, { highlights: serialized });
+      try {
+        await saveQuestionState(currentQuestion.id, { highlights: serialized });
+      } catch (err) {
+        console.error("Failed to save highlight:", err);
+        updateQuestion(currentQuestion.id, { highlights: previous });
+      }
+    },
+    [currentQuestion, expired, saveQuestionState, updateQuestion],
+  );
+
+  const handleRemoveHighlight = useCallback(
+    async (range: HighlightRange) => {
+      if (expired || !currentQuestion) return;
+      const previous = currentQuestion.highlights;
+      const nextHighlights = parseHighlights(previous).filter(
+        (existing) => existing.start !== range.start || existing.end !== range.end,
+      );
+      const serialized = serializeHighlights(nextHighlights);
+      updateQuestion(currentQuestion.id, { highlights: serialized });
+      try {
+        await saveQuestionState(currentQuestion.id, { highlights: serialized });
+      } catch (err) {
+        console.error("Failed to save highlight removal:", err);
+        updateQuestion(currentQuestion.id, { highlights: previous });
+      }
+    },
+    [currentQuestion, expired, saveQuestionState, updateQuestion],
+  );
+
   const goToReview = useCallback(async () => {
     await flushAll();
     router.push(reviewPath(attemptId));
@@ -157,6 +199,8 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
     ? new Set(parseCrossedOutChoices(currentQuestion.crossedOutChoices))
     : undefined;
 
+  const highlights = currentQuestion ? parseHighlights(currentQuestion.highlights) : undefined;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="module-runner">
       <TopBar
@@ -180,6 +224,9 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
             onToggleFlag={handleToggleFlag}
             crossedOutLetters={crossedOutLetters}
             onToggleCrossOut={handleToggleCrossOut}
+            highlights={section === "rw" ? highlights : undefined}
+            onAddHighlight={section === "rw" ? handleAddHighlight : undefined}
+            onRemoveHighlight={section === "rw" ? handleRemoveHighlight : undefined}
           />
         )}
       </main>
