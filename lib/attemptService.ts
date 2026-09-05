@@ -26,6 +26,13 @@
  * `saveAnswer` takes an explicit `module` because Epic 3's Module 2 runner needs the
  * exact same per-question persistence path; nothing here may assume module 1.
  *
+ * ## The runner read model
+ *
+ * `readModuleQuestions` is the read counterpart to assembly: it returns an
+ * already-served module's questions *and* the student's saved work on them, in
+ * `order_index` order. Epic 3's runner, review screen and resume path all read through
+ * it, so the `wasRecycled` reconstruction below has exactly one owner.
+ *
  * ## Invariants this module now guarantees
  *
  * These are latent-but-harmless while the only caller is the smoke test, and load-bearing
@@ -73,9 +80,56 @@ import { assembleModule1, assembleModuleForSection, MODULE2_DIFFICULTY_MIX } fro
 import { scoreModule1, isAnswerCorrect, type DifficultyPath, type Module1ScoreResult } from "./adaptiveRouting";
 import type { QuestionRow, SelectedQuestion } from "./questionSelector";
 
+/**
+ * The student's saved work on one served question, as stored on its
+ * `test_attempt_questions` row.
+ *
+ * `is_correct` is deliberately absent. It lives on the same row, but this shape feeds
+ * the runner (Epic 3 D1 ships the whole module to the client at once), and correctness
+ * must not reach the client mid-test -- see the HTTP contract's "never returns
+ * correctness" note on the answer endpoint. Scoring reads the column directly.
+ *
+ * `crossedOutChoices` and `highlights` are carried as the raw JSON text held in the
+ * columns, not parsed. Epic 3 only plumbs them (D5); Epic 4 owns their shape, and
+ * parsing them here would mean inventing that shape a whole epic early -- and would give
+ * this read path a way to throw on a row a future writer wrote slightly differently.
+ */
+export interface QuestionSavedState {
+  userAnswer: string | null;
+  flagged: boolean;
+  /** Raw JSON text from `crossed_out_choices`; unparsed on purpose (see above). */
+  crossedOutChoices: string | null;
+  /** Raw JSON text from `highlights`; unparsed on purpose (see above). */
+  highlights: string | null;
+}
+
+/**
+ * The saved state of a question that was just inserted by assembly.
+ *
+ * This is not a guess: `insertModuleQuestions` INSERTs only
+ * (attempt_id, question_id, module, section, order_index), so the remaining columns take
+ * their schema defaults -- `user_answer` NULL, `flagged` 0, `crossed_out_choices` NULL,
+ * `highlights` NULL (migration 0003). Stating it explicitly is what lets a freshly
+ * assembled module and a read-back module share one type, which matters because
+ * `assembleModule2ForSection` returns whichever of the two applies and its caller cannot
+ * tell them apart.
+ */
+const FRESHLY_INSERTED_STATE: QuestionSavedState = {
+  userAnswer: null,
+  flagged: false,
+  crossedOutChoices: null,
+  highlights: null,
+};
+
 export interface AssembledModuleQuestion {
   orderIndex: number;
   question: SelectedQuestion;
+  /**
+   * The student's work on this question. Always present, so the two producers of this
+   * type -- `insertModuleQuestions` (fresh, always the defaults above) and
+   * `readModuleQuestions` (whatever is on the row now) -- are structurally identical.
+   */
+  state: QuestionSavedState;
 }
 
 export interface NewAttemptResult {
@@ -120,7 +174,7 @@ function insertModuleQuestions(
   const insertAll = db.transaction((qs: SelectedQuestion[]) => {
     for (const q of qs) {
       insert.run(attemptId, q.id, module, section, orderIndex);
-      inserted.push({ orderIndex, question: q });
+      inserted.push({ orderIndex, question: q, state: { ...FRESHLY_INSERTED_STATE } });
       orderIndex += 1;
     }
   });
@@ -276,7 +330,22 @@ export function submitModule1Answers(
 
 /**
  * Reads an already-assembled module back out of `test_attempt_questions`, in
- * `order_index` order, shaped exactly like a fresh assembly's return value.
+ * `order_index` order, shaped exactly like a fresh assembly's return value -- question
+ * content *and* the student's saved work on it.
+ *
+ * This is the single read model behind the Epic 3 runner (D1 ships a whole module to the
+ * client in one payload) and behind any resume-after-refresh: it is exported rather than
+ * private specifically so nothing else has to re-derive the `wasRecycled` CTE below,
+ * which is the one query in this file with a non-obvious correctness argument.
+ *
+ * The saved-state columns (`user_answer`, `flagged`, `crossed_out_choices`,
+ * `highlights`) are read into `AssembledModuleQuestion.state`, the same field a
+ * fresh insert fills with the schema defaults. That is what keeps
+ * `assembleModule2ForSection`'s two return paths -- newly assembled vs. read back --
+ * structurally identical; a caller must never have to ask which one it got.
+ *
+ * `is_correct` is on these rows and is deliberately not selected: it would ride a
+ * runner payload straight to the client mid-test. Scoring reads it directly.
  *
  * ## Recovering `wasRecycled`
  *
@@ -299,7 +368,7 @@ export function submitModule1Answers(
  * one), we degrade to "has this question ever been served by anything other than this
  * attempt", which is the same question asked with the ordering information missing.
  */
-function readAssembledModule(
+export function readModuleQuestions(
   db: Database.Database,
   attemptId: number,
   section: Section,
@@ -314,6 +383,10 @@ function readAssembledModule(
          GROUP BY question_id
        )
        SELECT q.*, taq.order_index AS order_index,
+         taq.user_answer AS user_answer,
+         taq.flagged AS flagged,
+         taq.crossed_out_choices AS crossed_out_choices,
+         taq.highlights AS highlights,
          CASE WHEN own_serve.min_id IS NULL THEN
            EXISTS (
              SELECT 1 FROM question_serve_log sl
@@ -334,13 +407,31 @@ function readAssembledModule(
     .all(attemptId, attemptId, attemptId, section, module) as (QuestionRow & {
     order_index: number;
     was_recycled: number;
+    user_answer: string | null;
+    flagged: number;
+    crossed_out_choices: string | null;
+    highlights: string | null;
   })[];
 
   return rows.map((row) => {
-    const { order_index, was_recycled, ...question } = row;
+    const {
+      order_index,
+      was_recycled,
+      user_answer,
+      flagged,
+      crossed_out_choices,
+      highlights,
+      ...question
+    } = row;
     return {
       orderIndex: order_index,
       question: { ...question, wasRecycled: was_recycled === 1 },
+      state: {
+        userAnswer: user_answer,
+        flagged: flagged === 1,
+        crossedOutChoices: crossed_out_choices,
+        highlights,
+      },
     };
   });
 }
@@ -409,7 +500,7 @@ export function assembleModule2ForSection(
       return {
         ...score,
         path: (attempt.storedPath as DifficultyPath | null) ?? score.path,
-        questions: readAssembledModule(db, attemptId, section, 2),
+        questions: readModuleQuestions(db, attemptId, section, 2),
       };
     }
 

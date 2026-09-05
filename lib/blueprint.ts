@@ -56,6 +56,22 @@ export const BLUEPRINT: Record<Section, SectionBlueprint> = {
   },
 };
 
+/**
+ * The scheduled break between the R&W and Math sections, in seconds (Epic 3 D8).
+ *
+ * Lives here beside the per-module limits because it is the same kind of fact -- a
+ * blueprint timing constant the UI counts down against -- and because the break clock is
+ * enforced exactly like a module clock: `test_attempts.break_started_at` is stamped
+ * server-side when R&W Module 2 ends, and the deadline is derived from it
+ * (`lib/testFlow.ts`'s `breakDeadline`), so a refresh resumes the real remaining time
+ * rather than restarting the break.
+ *
+ * Ten minutes matches the real digital SAT's section break. Unlike a module timer,
+ * expiry here is not a hard stop -- the student may end the break early ("Resume
+ * testing"), and either way Math's own clock starts only when the break ends.
+ */
+export const BREAK_DURATION_SECONDS = 10 * 60; // 600s, per PRD Story 3.5 / App user guide
+
 export function getSectionBlueprint(section: Section): SectionBlueprint {
   return BLUEPRINT[section];
 }
