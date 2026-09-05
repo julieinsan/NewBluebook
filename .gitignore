@@ -37,7 +37,8 @@ yarn-error.log*
 .vercel
 
 # local sqlite database (created on first run, see lib/db.ts)
-/data/
+# NOTE: /data/seed/ holds hand-transcribed question-bank JSON and IS tracked —
+# only the generated db files themselves are ignored.
 *.db
 *.db-journal
 *.db-wal

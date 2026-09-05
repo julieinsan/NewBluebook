@@ -9,7 +9,11 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "ingest:difficulty": "tsx scripts/ingest-difficulty-csv.ts",
+    "ingest:rw": "tsx scripts/ingest-rw.ts",
+    "ingest:math": "tsx scripts/ingest-math.ts",
+    "qa:questions": "tsx scripts/qa-questions.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
