@@ -13,7 +13,9 @@
     "ingest:difficulty": "tsx scripts/ingest-difficulty-csv.ts",
     "ingest:rw": "tsx scripts/ingest-rw.ts",
     "ingest:math": "tsx scripts/ingest-math.ts",
-    "qa:questions": "tsx scripts/qa-questions.ts"
+    "qa:questions": "tsx scripts/qa-questions.ts",
+    "test": "node --import tsx --test lib/**/*.test.ts",
+    "smoke:assembly": "tsx scripts/smoke-test-assembly.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
