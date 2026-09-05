@@ -1,7 +1,11 @@
 import type { AttemptSummary } from "@/lib/attemptState";
 import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { AttemptHistory } from "./AttemptHistory";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 const completedAttempt: AttemptSummary = {
   attemptId: 7,
@@ -45,4 +49,15 @@ test("AttemptHistory keeps Resume link for in-progress attempts", () => {
     "/test/8/rw/1",
   );
   expect(screen.queryByText("View results")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Delete Practice Test 1 · Attempt #8" }),
+  ).toBeDefined();
+});
+
+test("AttemptHistory shows delete control for completed attempts", () => {
+  render(<AttemptHistory attempts={[completedAttempt]} />);
+
+  expect(
+    screen.getByRole("button", { name: "Delete Practice Test 1 · Attempt #7" }),
+  ).toBeDefined();
 });

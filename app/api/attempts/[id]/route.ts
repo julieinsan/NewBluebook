@@ -1,0 +1,27 @@
+import { deleteAttempt } from "@/lib/deleteAttempt";
+import { getDb } from "@/lib/db";
+import {
+  errorResponse,
+  handleRouteError,
+  jsonResponse,
+  parseAttemptId,
+} from "../_helpers";
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  try {
+    const { id: rawId } = await params;
+    const attemptId = parseAttemptId(rawId);
+    if (attemptId == null) {
+      return errorResponse("Invalid attempt id", 400);
+    }
+
+    const db = getDb();
+    deleteAttempt(db, attemptId);
+    return jsonResponse({ ok: true });
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}

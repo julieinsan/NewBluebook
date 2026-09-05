@@ -112,6 +112,13 @@ export async function postResume(attemptId: number): Promise<{ next: string }> {
   return parseJsonResponse(response);
 }
 
+export async function deleteAttempt(attemptId: number): Promise<{ ok: boolean }> {
+  const response = await fetch(`/api/attempts/${attemptId}`, {
+    method: "DELETE",
+  });
+  return parseJsonResponse(response);
+}
+
 /** Fire-and-forget save for unload — uses keepalive so the browser may complete it. */
 export function postQuestionStateKeepalive(
   attemptId: number,

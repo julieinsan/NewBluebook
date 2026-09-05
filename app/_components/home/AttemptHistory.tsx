@@ -1,6 +1,7 @@
 import type { AttemptSummary } from "@/lib/attemptState";
 import { resultsPath } from "@/lib/testFlow";
 import Link from "next/link";
+import { DeleteAttemptButton } from "./DeleteAttemptButton";
 import { formatAttemptStartedAt, positionLabel, practiceTestLabel } from "./positionLabel";
 import { ResumeButton } from "./ResumeButton";
 
@@ -62,11 +63,17 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
                     {formatAttemptStartedAt(attempt.startedAt)}
                   </p>
                 </div>
-                {resumeControl(
-                  attempt,
-                  "inline-block w-fit rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground",
-                  attempt.isPaused ? "Resume test" : "Resume test",
-                )}
+                <div className="flex items-center gap-2">
+                  {resumeControl(
+                    attempt,
+                    "inline-block w-fit rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground",
+                    "Resume test",
+                  )}
+                  <DeleteAttemptButton
+                    attemptId={attempt.attemptId}
+                    practiceTest={attempt.practiceTest}
+                  />
+                </div>
               </li>
             ))}
           </ul>
@@ -87,29 +94,37 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
                   {positionLabel(attempt.position, attempt.isPaused)}
                 </p>
               </div>
-              {attempt.resumable ? (
-                resumeControl(
-                  attempt,
-                  "shrink-0 text-sm font-medium text-accent hover:underline",
-                  "Resume",
-                )
-              ) : isCompletedAttempt(attempt) ? (
-                <div className="shrink-0 text-right">
-                  {attempt.totalScaledScore != null && (
-                    <p className="text-xs text-foreground/70">
-                      Score: {attempt.totalScaledScore}
-                    </p>
-                  )}
-                  <Link
-                    href={resultsPath(attempt.attemptId)}
-                    className="text-sm font-medium text-accent hover:underline"
-                  >
-                    View results
-                  </Link>
-                </div>
-              ) : (
-                <span className="shrink-0 text-xs text-foreground/50">Completed</span>
-              )}
+              <div className="flex shrink-0 items-center gap-1">
+                {attempt.resumable ? (
+                  resumeControl(
+                    attempt,
+                    "text-sm font-medium text-accent hover:underline",
+                    "Resume",
+                  )
+                ) : isCompletedAttempt(attempt) ? (
+                  <div className="text-right">
+                    {attempt.totalScaledScore != null && (
+                      <p className="text-xs text-foreground/70">
+                        Score: {attempt.totalScaledScore}
+                      </p>
+                    )}
+                    <Link
+                      href={resultsPath(attempt.attemptId)}
+                      className="text-sm font-medium text-accent hover:underline"
+                    >
+                      View results
+                    </Link>
+                  </div>
+                ) : (
+                  <span className="text-xs text-foreground/50">Completed</span>
+                )}
+                {!attempt.resumable && (
+                  <DeleteAttemptButton
+                    attemptId={attempt.attemptId}
+                    practiceTest={attempt.practiceTest}
+                  />
+                )}
+              </div>
             </li>
           ))}
         </ul>
