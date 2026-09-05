@@ -1,0 +1,8 @@
+node_modules
+.next
+data
+package-lock.json
+*.db
+
+# Reference material — do not reformat.
+PRD.md

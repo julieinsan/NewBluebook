@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/*
+ * Bluebook visual style (PRD Section 8): sober and "clinical" — high contrast,
+ * near-white background, near-black text, a single deep-blue accent, a yellow
+ * highlighter color, everything else grayscale. Light mode is the primary target;
+ * dark mode is a nice-to-have driven purely by prefers-color-scheme (no toggle yet).
+ */
+:root {
+  --background: #ffffff;
+  --background-subtle: #fafafa;
+  --foreground: #1a1a1a;
+  --accent: #0b5cab;
+  --accent-foreground: #ffffff;
+  --highlight: #ffeb3b;
+  --highlight-foreground: #1a1a1a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-subtle: var(--background-subtle);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1a1a1a;
+    --background-subtle: #232323;
+    --foreground: #f2f2f2;
+    --accent: #4d9de8;
+    --accent-foreground: #1a1a1a;
+    --highlight: #ffeb3b;
+    --highlight-foreground: #1a1a1a;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
