@@ -1,7 +1,15 @@
 import type { AttemptSummary } from "@/lib/attemptState";
+import { resultsPath } from "@/lib/testFlow";
 import Link from "next/link";
 import { formatAttemptStartedAt, positionLabel, practiceTestLabel } from "./positionLabel";
 import { ResumeButton } from "./ResumeButton";
+
+function isCompletedAttempt(attempt: AttemptSummary): boolean {
+  return (
+    !attempt.resumable &&
+    (attempt.status === "submitted" || attempt.totalScaledScore != null)
+  );
+}
 
 export interface AttemptHistoryProps {
   attempts: AttemptSummary[];
@@ -85,6 +93,20 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
                   "shrink-0 text-sm font-medium text-accent hover:underline",
                   "Resume",
                 )
+              ) : isCompletedAttempt(attempt) ? (
+                <div className="shrink-0 text-right">
+                  {attempt.totalScaledScore != null && (
+                    <p className="text-xs text-foreground/70">
+                      Score: {attempt.totalScaledScore}
+                    </p>
+                  )}
+                  <Link
+                    href={resultsPath(attempt.attemptId)}
+                    className="text-sm font-medium text-accent hover:underline"
+                  >
+                    View results
+                  </Link>
+                </div>
               ) : (
                 <span className="shrink-0 text-xs text-foreground/50">Completed</span>
               )}

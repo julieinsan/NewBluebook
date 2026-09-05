@@ -27,7 +27,9 @@ import {
   moduleSubmittedAtColumn,
   moduleTimeLimitSeconds,
   parseSqliteTimestamp,
+  answerReviewPath,
   pathForPosition,
+  resultsPath,
   reviewPath,
   runnerPath,
   samePosition,
@@ -160,6 +162,8 @@ test("route helpers produce the canonical D4 paths", () => {
   assert.equal(reviewPath(42), "/test/42/review");
   assert.equal(breakPath(42), "/test/42/break");
   assert.equal(submittedPath(42), "/test/42/submitted");
+  assert.equal(resultsPath(42), "/test/42/results");
+  assert.equal(answerReviewPath(42), "/test/42/results/answers");
 });
 
 test("pathForPosition covers every position kind", () => {

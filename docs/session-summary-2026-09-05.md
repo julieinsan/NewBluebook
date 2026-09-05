@@ -112,5 +112,5 @@ For home test selection:
 
 ## Suggested next steps
 
-- Epic 4 Wave 3 — verification gate (automated tests + manual QA walk-through for cross-out, highlighter, regression)
-- Epic 5 — scoring, results dashboard, and review-screen "seen before" badge for recycled questions
+- Epic 4 Wave 3 — manual QA walk-through (§6 of [epic-4-implementation-plan.md](./epic-4-implementation-plan.md)); automated gate passed
+- Epic 5 Wave 2 — results dashboard, answer review UI, home wiring; see [epic-5-implementation-plan.md](./epic-5-implementation-plan.md)

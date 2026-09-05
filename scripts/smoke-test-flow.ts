@@ -26,6 +26,7 @@ import {
 } from "../lib/attemptState";
 import { saveAnswerWithDeadline } from "../lib/questionState";
 import { endBreak, endModule1, endModule2, submitAttempt } from "../lib/moduleTransition";
+import { getAttemptScores } from "../lib/scoring";
 import {
   LATE_ANSWER_GRACE_MS,
   formatSqliteTimestamp,
@@ -258,6 +259,20 @@ function main() {
   const submitSecond = submitAttempt(db, attemptId);
   check("submitAttempt marks status submitted", submitFirst.submittedNow);
   check("submitAttempt second delivery is idempotent", !submitSecond.submittedNow);
+  const scores = getAttemptScores(db, attemptId);
+  check(
+    "submit persists approximate scaled scores",
+    scores.totalScaled >= 400 &&
+      scores.totalScaled <= 1600 &&
+      scores.rwScaled >= 200 &&
+      scores.mathScaled >= 200,
+    `total=${scores.totalScaled} rw=${scores.rwScaled} math=${scores.mathScaled}`,
+  );
+  check(
+    "raw section totals match blueprint",
+    scores.raw.sections.find((s) => s.section === "rw")?.total === 54 &&
+      scores.raw.sections.find((s) => s.section === "math")?.total === 44,
+  );
   check(
     "all four module submitted-at stamps are set",
     ["rw", "math"].every((section) =>

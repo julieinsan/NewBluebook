@@ -83,6 +83,31 @@ export async function guardSubmittedPage(attemptId: number): Promise<void> {
   }
 }
 
+async function guardSubmittedResultsPage(attemptId: number): Promise<void> {
+  await connection();
+  const db = getDb();
+  try {
+    redirectIfPaused(db, attemptId);
+    const state = getAttemptState(db, attemptId);
+    if (state.status !== "submitted") {
+      const position = resolvePositionForAttempt(db, attemptId);
+      redirect(pathForPosition(attemptId, position));
+    }
+  } catch (err) {
+    handleMissingAttempt(err);
+  }
+}
+
+/** Post-submit score dashboard — requires `status === 'submitted'` (Epic 5 D5). */
+export async function guardResultsPage(attemptId: number): Promise<void> {
+  await guardSubmittedResultsPage(attemptId);
+}
+
+/** Post-submit answer review — same guard as results (Epic 5 D5). */
+export async function guardAnswerReviewPage(attemptId: number): Promise<void> {
+  await guardSubmittedResultsPage(attemptId);
+}
+
 export async function readBreakStartedAt(attemptId: number): Promise<string> {
   await connection();
   const db = getDb();

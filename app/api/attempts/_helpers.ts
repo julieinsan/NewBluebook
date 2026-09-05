@@ -45,6 +45,7 @@ export function handleRouteError(err: unknown): NextResponse {
       /has not started/.test(err.message) ||
       /cannot be paused/.test(err.message) ||
       /practiceTest must be 1 or 2/.test(err.message) ||
+      /is not submitted/.test(err.message) ||
       /Invalid/.test(err.message)
     ) {
       return errorResponse(err.message, 400);

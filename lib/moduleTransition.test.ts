@@ -400,14 +400,27 @@ test("submitAttempt is idempotent", () => {
   assert.equal(first.submittedNow, true);
   assert.equal(stamp(db, attemptId, "status"), "submitted");
   assert.equal(stamp(db, attemptId, "submitted_at"), first.submittedAt);
+  assert.ok(
+    (db.prepare("SELECT total_scaled_score AS v FROM test_attempts WHERE id = ?").get(attemptId) as {
+      v: number | null;
+    }).v != null,
+    "first submit must persist scaled scores",
+  );
 
   const submittedAt = backdateStamp(db, attemptId, "submitted_at", 3);
+  const scoresBefore = db
+    .prepare("SELECT total_scaled_score AS v FROM test_attempts WHERE id = ?")
+    .get(attemptId) as { v: number | null };
   const second = submitAttempt(db, attemptId);
 
   assert.equal(second.submittedNow, false);
   assert.equal(second.submittedAt, submittedAt);
   assert.equal(stamp(db, attemptId, "submitted_at"), submittedAt);
   assert.equal(stamp(db, attemptId, "status"), "submitted");
+  const scoresAfter = db
+    .prepare("SELECT total_scaled_score AS v FROM test_attempts WHERE id = ?")
+    .get(attemptId) as { v: number | null };
+  assert.equal(scoresAfter.v, scoresBefore.v, "second submit must not re-score");
   assert.throws(() => submitAttempt(db, 9999), /does not exist/);
 });
 

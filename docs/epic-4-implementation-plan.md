@@ -1,6 +1,6 @@
 # Epic 4 — In-Test Tools: implementation plan
 
-**Status:** Waves 0–2 complete; Wave 3 = verification gate. Math tools (Stories 4.3–4.4) **deferred — not shipping in v1** (revision 2)
+**Status:** Waves 0–2 complete; Wave 3 automated gate ✅; manual QA remaining. Math tools (Stories 4.3–4.4) **deferred — not shipping in v1** (revision 2)
 **Covers:** PRD Stories 4.1–4.2 ([PRD.md](../PRD.md) § Epic 4, §8 visual spec)
 **Out of scope:** PRD Stories 4.3–4.4 (Desmos calculator, digital reference sheet) — see [§ Deferred: Math tools](#deferred-math-tools-stories-43--44)
 **Depends on:** Epic 3 complete
@@ -139,7 +139,7 @@ Three waves shipped; one deferred; verification gate remains.
 
 | # | Task | Notes |
 |---|---|---|
-| 3.1 | `npm test`, `npm run test:ui`, `npm run build`, `npm run lint` | Gate before merge |
+| 3.1 | `npm test`, `npm run test:ui`, `npm run build`, `npm run lint` | ✅ Gate passed 2026-09-05 |
 | 3.2 | Manual QA walk-through (§6) | Browser-only; async pages |
 
 ---

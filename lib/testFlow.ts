@@ -533,6 +533,27 @@ export function submittedPath(attemptId: number): string {
 }
 
 /**
+ * Epic 5 (Story 5.3): post-submit score report — `/test/42/results`.
+ *
+ * Distinct from `reviewPath` (end-of-module review, Epic 3 Story 3.4). Static segment
+ * `results` cannot collide with the runner's `[section]/[module]` shape for the same
+ * reason `review` cannot.
+ */
+export function resultsPath(attemptId: number): string {
+  return `${TEST_ROUTE_ROOT}/${attemptId}/results`;
+}
+
+/**
+ * Epic 5 (Story 5.4): post-submit answer review — `/test/42/results/answers`.
+ *
+ * Nested under `results` so the dashboard and per-question review share a namespace and
+ * guards can treat any `/results/*` path as post-submit-only.
+ */
+export function answerReviewPath(attemptId: number): string {
+  return `${resultsPath(attemptId)}/answers`;
+}
+
+/**
  * The canonical URL for a position.
  *
  * This is what a D4 guard redirects to and what every route handler's `next` field is

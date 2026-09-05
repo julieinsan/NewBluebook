@@ -86,6 +86,7 @@
  * against a 32-minute module). Use `parseSqliteTimestamp` from `lib/testFlow.ts`.
  */
 import type Database from "better-sqlite3";
+import { scoreAttempt } from "./scoring";
 import type { Section } from "./blueprint";
 import {
   assembleModule2ForSection,
@@ -440,6 +441,8 @@ export function submitAttempt(db: Database.Database, attemptId: number): SubmitA
        SET status = 'submitted', submitted_at = COALESCE(submitted_at, datetime('now'))
        WHERE id = ?`,
     ).run(attemptId);
+
+    scoreAttempt(db, attemptId);
 
     const submittedAt = db
       .prepare("SELECT submitted_at AS submittedAt FROM test_attempts WHERE id = ?")
