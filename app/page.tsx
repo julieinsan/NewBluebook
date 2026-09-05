@@ -2,7 +2,7 @@ import { listAttempts } from "@/lib/attemptState";
 import { getDb } from "@/lib/db";
 import { connection } from "next/server";
 import { AttemptHistory } from "./_components/home/AttemptHistory";
-import { DrillModeStub } from "./_components/home/DrillModeStub";
+import { DrillModeEntry } from "./_components/home/DrillModeEntry";
 import { StartTestButton } from "./_components/home/StartTestButton";
 
 export default async function Home() {
@@ -35,7 +35,7 @@ export default async function Home() {
         </p>
 
         <StartTestButton />
-        <DrillModeStub />
+        <DrillModeEntry />
 
         <AttemptHistory attempts={attempts} />
       </main>

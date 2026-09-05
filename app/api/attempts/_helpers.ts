@@ -46,6 +46,16 @@ export function handleRouteError(err: unknown): NextResponse {
       /cannot be paused/.test(err.message) ||
       /practiceTest must be 1 or 2/.test(err.message) ||
       /is not submitted/.test(err.message) ||
+      /Unknown domain/.test(err.message) ||
+      /No questions match/.test(err.message) ||
+      /already answered/.test(err.message) ||
+      /Answer the current question/.test(err.message) ||
+      /deltaSeconds must/.test(err.message) ||
+      /domain is required/.test(err.message) ||
+      /is not the active drill question/.test(err.message) ||
+      /is not part of drill session/.test(err.message) ||
+      /Body must/.test(err.message) ||
+      /Invalid drill session filters/.test(err.message) ||
       /Invalid/.test(err.message)
     ) {
       return errorResponse(err.message, 400);

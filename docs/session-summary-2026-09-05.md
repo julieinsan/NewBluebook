@@ -112,5 +112,6 @@ For home test selection:
 
 ## Suggested next steps
 
-- Epic 4 Wave 3 — manual QA walk-through (§6 of [epic-4-implementation-plan.md](./epic-4-implementation-plan.md)); automated gate passed
-- Epic 5 Wave 2 — results dashboard, answer review UI, home wiring; see [epic-5-implementation-plan.md](./epic-5-implementation-plan.md)
+- Epic 6 Wave 3 — manual QA walk-through (§Manual QA in [epic-6-implementation-plan.md](./epic-6-implementation-plan.md))
+- Epic 4 Wave 3 — manual QA for cross-out and highlighter
+- Epic 7 — score trend chart and reset utility
