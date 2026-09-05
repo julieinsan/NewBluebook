@@ -4,10 +4,53 @@
  * Single entry point (`startNewAttempt`) that creates a `test_attempts` row and
  * assembles both sections' Module 1 (Story 2.3), inserting the results into
  * `test_attempt_questions` (module=1). Module 2 for each section is assembled lazily,
- * once that section's Module 1 answers are submitted (`submitModule1Answers`), via
+ * once that section's Module 1 has been *finalized* (`finalizeModule1`), via
  * `assembleModule2ForSection`, which scores Module 1 (Story 2.4), stores the routed
  * difficulty path on the attempt, assembles Module 2, and inserts those rows
  * (module=2).
+ *
+ * ## Why the answer API is split (saveAnswer vs finalizeModule1)
+ *
+ * PRD Story 3.2 requires the module runner to persist "each answer as it's given
+ * (survives a refresh mid-module)". That makes *saving an answer* a continuous,
+ * per-question, repeatable event -- the student changes their mind, navigates Back,
+ * overwrites a choice -- while *declaring the module finished* happens exactly once.
+ * The original `submitModule1Answers` conflated the two, which meant there was no
+ * durable state anywhere saying "Module 1 is actually done", and therefore nothing
+ * `assembleModule2ForSection` could check. So:
+ *
+ *  - `saveAnswer`     -- upsert one answer. Idempotent, callable on every keystroke/click.
+ *  - `finalizeModule1` -- stamp `{section}_module1_submitted_at` (migration 0008). Once only.
+ *  - `submitModule1Answers` -- thin backward-compatible wrapper: save all, then finalize.
+ *
+ * `saveAnswer` takes an explicit `module` because Epic 3's Module 2 runner needs the
+ * exact same per-question persistence path; nothing here may assume module 1.
+ *
+ * ## Invariants this module now guarantees
+ *
+ * These are latent-but-harmless while the only caller is the smoke test, and load-bearing
+ * the moment Epic 3 calls this from HTTP handlers, where double-submits, refreshes and
+ * mid-request failures are routine:
+ *
+ *  1. **Module 2 requires a finalized Module 1.** `assembleModule2ForSection` throws if
+ *     `{section}_module1_submitted_at` is null, rather than scoring an unanswered module
+ *     as 0/27 and persisting a bogus "easier" routing.
+ *  2. **Module 2 assembly is idempotent.** A second call for the same (attempt, section)
+ *     returns the module-2 questions already on record instead of assembling and
+ *     inserting a second full module (which previously produced e.g. 54 R&W module-2
+ *     rows for one attempt).
+ *  3. **Assembly is atomic.** `startNewAttempt` and `assembleModule2ForSection` each run
+ *     inside a single `db.transaction(...)`. `assembleModuleForSection` genuinely throws
+ *     (when a domain cannot be filled even after difficulty fallback), and before this
+ *     that throw left behind a committed half-attempt -- and, worse, `question_serve_log`
+ *     rows written by `selectQuestions` for questions that were never shown to anyone,
+ *     silently degrading the LRU freshness Story 2.2 exists to protect. Rolling back the
+ *     whole call takes those serve-log rows with it.
+ *
+ * better-sqlite3 transactions require a fully synchronous callback; every function here
+ * is synchronous and must stay that way. Nested `db.transaction` calls become SAVEPOINTs,
+ * so the inner transactions inside `insertModuleQuestions` and `selectQuestions` keep
+ * working unchanged and simply join the outer transaction.
  *
  * ## order_index note
  *
@@ -28,7 +71,7 @@ import { getDb } from "./db";
 import type { Section } from "./blueprint";
 import { assembleModule1, assembleModuleForSection, MODULE2_DIFFICULTY_MIX } from "./moduleAssembly";
 import { scoreModule1, isAnswerCorrect, type DifficultyPath, type Module1ScoreResult } from "./adaptiveRouting";
-import type { SelectedQuestion } from "./questionSelector";
+import type { QuestionRow, SelectedQuestion } from "./questionSelector";
 
 export interface AssembledModuleQuestion {
   orderIndex: number;
@@ -90,59 +133,79 @@ function insertModuleQuestions(
  * Creates a new `test_attempts` row and assembles + persists Module 1 for both
  * sections (R&W first, then Math). Returns everything the UI needs to render R&W
  * Module 1 first, per Story 2.5's acceptance criteria.
+ *
+ * The whole thing is one transaction: if Math's assembly throws after R&W's succeeded,
+ * the attempt row, R&W's `test_attempt_questions` rows AND both sections'
+ * `question_serve_log` entries all roll back, rather than leaving a half-built attempt
+ * behind and burning serve-log freshness on questions nobody ever saw.
  */
 export function startNewAttempt(db: Database.Database = getDb()): NewAttemptResult {
-  const info = db.prepare("INSERT INTO test_attempts DEFAULT VALUES").run();
-  const attemptId = info.lastInsertRowid as number;
+  const run = db.transaction((): NewAttemptResult => {
+    const info = db.prepare("INSERT INTO test_attempts DEFAULT VALUES").run();
+    const attemptId = info.lastInsertRowid as number;
 
-  const rwQuestions = assembleModule1(db, "rw", attemptId);
-  const rw = insertModuleQuestions(db, attemptId, "rw", 1, rwQuestions);
+    const rwQuestions = assembleModule1(db, "rw", attemptId);
+    const rw = insertModuleQuestions(db, attemptId, "rw", 1, rwQuestions);
 
-  const mathQuestions = assembleModule1(db, "math", attemptId);
-  const math = insertModuleQuestions(db, attemptId, "math", 1, mathQuestions);
+    const mathQuestions = assembleModule1(db, "math", attemptId);
+    const math = insertModuleQuestions(db, attemptId, "math", 1, mathQuestions);
 
-  return { attemptId, rw, math };
+    return { attemptId, rw, math };
+  });
+
+  return run();
 }
 
 /**
- * Records the student's Module 1 answers for a section (user_answer + computed
- * is_correct on each `test_attempt_questions` row). Must be called before
- * `assembleModule2ForSection` for that section, since routing depends on these
- * answers.
+ * Persists a single answer (`user_answer` + the graded `is_correct`) onto the one
+ * `test_attempt_questions` row for (attempt, section, module, question).
+ *
+ * Idempotent by construction -- it's a plain UPDATE of that row, so calling it
+ * repeatedly as the student changes their mind just overwrites the previous value.
+ * This is the call Story 3.2's module runner makes per answer so that a refresh
+ * mid-module loses nothing. It deliberately does NOT touch the module's submitted-at
+ * stamp: saving an answer never means the module is finished (see `finalizeModule1`).
+ *
+ * `module` is a parameter, not a constant: Module 2 answers go through this exact same
+ * path in Epic 3.
+ *
+ * Throws if the question isn't part of that attempt/section/module -- an answer for a
+ * question the student was never served is a bug in the caller, not something to record.
  */
-export function submitModule1Answers(
+export function saveAnswer(
   db: Database.Database,
   attemptId: number,
   section: Section,
-  answers: AnswerSubmission[],
+  module: 1 | 2,
+  questionId: string,
+  userAnswer: string | null,
 ): void {
-  const getCorrectAnswer = db.prepare(
-    `SELECT q.correct_answer AS correct_answer
-     FROM test_attempt_questions taq
-     JOIN questions q ON q.id = taq.question_id
-     WHERE taq.attempt_id = ? AND taq.section = ? AND taq.module = 1 AND taq.question_id = ?`,
-  );
-  const update = db.prepare(
-    `UPDATE test_attempt_questions SET user_answer = ?, is_correct = ?
-     WHERE attempt_id = ? AND section = ? AND module = 1 AND question_id = ?`,
-  );
+  const row = db
+    .prepare(
+      `SELECT q.correct_answer AS correct_answer
+       FROM test_attempt_questions taq
+       JOIN questions q ON q.id = taq.question_id
+       WHERE taq.attempt_id = ? AND taq.section = ? AND taq.module = ? AND taq.question_id = ?`,
+    )
+    .get(attemptId, section, module, questionId) as { correct_answer: string } | undefined;
 
-  const applyAll = db.transaction((subs: AnswerSubmission[]) => {
-    for (const { questionId, userAnswer } of subs) {
-      const row = getCorrectAnswer.get(attemptId, section, questionId) as
-        | { correct_answer: string }
-        | undefined;
-      if (!row) {
-        throw new Error(
-          `Question ${questionId} is not part of attempt ${attemptId}'s Module 1 for section "${section}"`,
-        );
-      }
-      const isCorrect = isAnswerCorrect(row.correct_answer, userAnswer);
-      update.run(userAnswer, isCorrect ? 1 : 0, attemptId, section, questionId);
-    }
-  });
-  applyAll(answers);
+  if (!row) {
+    throw new Error(
+      `Question ${questionId} is not part of attempt ${attemptId}'s Module ${module} for section "${section}"`,
+    );
+  }
+
+  const isCorrect = isAnswerCorrect(row.correct_answer, userAnswer);
+  db.prepare(
+    `UPDATE test_attempt_questions SET user_answer = ?, is_correct = ?
+     WHERE attempt_id = ? AND section = ? AND module = ? AND question_id = ?`,
+  ).run(userAnswer, isCorrect ? 1 : 0, attemptId, section, module, questionId);
 }
+
+const MODULE1_SUBMITTED_AT_COLUMN: Record<Section, string> = {
+  rw: "rw_module1_submitted_at",
+  math: "math_module1_submitted_at",
+};
 
 const MODULE2_PATH_COLUMN: Record<Section, string> = {
   rw: "rw_module2_difficulty_path",
@@ -150,37 +213,227 @@ const MODULE2_PATH_COLUMN: Record<Section, string> = {
 };
 
 /**
+ * Declares a section's Module 1 finished by stamping `{section}_module1_submitted_at`
+ * (migration 0008). This is the single event that unlocks `assembleModule2ForSection`,
+ * and it is the *only* durable evidence that the student actually ended the module --
+ * answers alone can't say that, since they're saved continuously while the module is
+ * still in progress.
+ *
+ * Throws if that section's Module 1 is already stamped. A module cannot be submitted
+ * twice, and treating a duplicate submit as a no-op would hide the far more likely
+ * cause: a double-submitted form or a retried request that would otherwise be silently
+ * accepted.
+ */
+export function finalizeModule1(db: Database.Database, attemptId: number, section: Section): void {
+  const column = MODULE1_SUBMITTED_AT_COLUMN[section];
+
+  const finalize = db.transaction(() => {
+    const row = db
+      .prepare(`SELECT ${column} AS submittedAt FROM test_attempts WHERE id = ?`)
+      .get(attemptId) as { submittedAt: string | null } | undefined;
+
+    if (!row) {
+      throw new Error(`Attempt ${attemptId} does not exist`);
+    }
+    if (row.submittedAt != null) {
+      throw new Error(
+        `Module 1 for section "${section}" of attempt ${attemptId} was already submitted ` +
+          `at ${row.submittedAt} -- a module cannot be submitted twice`,
+      );
+    }
+
+    db.prepare(`UPDATE test_attempts SET ${column} = datetime('now') WHERE id = ?`).run(attemptId);
+  });
+
+  finalize();
+}
+
+/**
+ * Records the student's Module 1 answers for a section and marks that Module 1
+ * submitted, in one shot.
+ *
+ * Retained with its original signature purely for backward compatibility (the Epic 2
+ * smoke test and any pre-split caller). It is now a thin wrapper over `saveAnswer` +
+ * `finalizeModule1`; Epic 3's runner should call those two directly instead, since it
+ * saves answers continuously and finalizes exactly once at the end. Inherits
+ * `finalizeModule1`'s "cannot be submitted twice" throw.
+ */
+export function submitModule1Answers(
+  db: Database.Database,
+  attemptId: number,
+  section: Section,
+  answers: AnswerSubmission[],
+): void {
+  const applyAll = db.transaction((subs: AnswerSubmission[]) => {
+    for (const { questionId, userAnswer } of subs) {
+      saveAnswer(db, attemptId, section, 1, questionId, userAnswer);
+    }
+    finalizeModule1(db, attemptId, section);
+  });
+
+  applyAll(answers);
+}
+
+/**
+ * Reads an already-assembled module back out of `test_attempt_questions`, in
+ * `order_index` order, shaped exactly like a fresh assembly's return value.
+ *
+ * ## Recovering `wasRecycled`
+ *
+ * `SelectedQuestion.wasRecycled` means "this question had already been served at least
+ * once before the selection that put it in this module" -- a fact about
+ * `question_serve_log` at selection time, which `test_attempt_questions` does not store.
+ * Rather than hardcode a value (which would silently lie to the review screen that
+ * consumes this flag, per PRD 3.3/5.4), it is reconstructed from the serve log itself:
+ * find this attempt's own serve-log entry for the question, and ask whether any serve
+ * entry for that question predates it.
+ *
+ * The comparison is on the log's autoincrement `id`, not `served_at`: `served_at` is
+ * `datetime('now')`, i.e. whole-second granularity, so an attempt assembled in the same
+ * second as a prior serve would produce ties that could flip the answer either way. `id`
+ * is strictly monotonic per insert and gives the exact ordering the original selection
+ * saw. This reproduces the original value faithfully as long as the serve log is intact.
+ *
+ * Fallback: if this attempt has no serve-log entry for the question at all (only
+ * possible if the log were pruned or rows were hand-edited -- assembly always writes
+ * one), we degrade to "has this question ever been served by anything other than this
+ * attempt", which is the same question asked with the ordering information missing.
+ */
+function readAssembledModule(
+  db: Database.Database,
+  attemptId: number,
+  section: Section,
+  module: 1 | 2,
+): AssembledModuleQuestion[] {
+  const rows = db
+    .prepare(
+      `WITH own_serve AS (
+         SELECT question_id, MIN(id) AS min_id
+         FROM question_serve_log
+         WHERE attempt_id = ?
+         GROUP BY question_id
+       )
+       SELECT q.*, taq.order_index AS order_index,
+         CASE WHEN own_serve.min_id IS NULL THEN
+           EXISTS (
+             SELECT 1 FROM question_serve_log sl
+             WHERE sl.question_id = q.id AND (sl.attempt_id IS NULL OR sl.attempt_id <> ?)
+           )
+         ELSE
+           EXISTS (
+             SELECT 1 FROM question_serve_log sl
+             WHERE sl.question_id = q.id AND sl.id < own_serve.min_id
+           )
+         END AS was_recycled
+       FROM test_attempt_questions taq
+       JOIN questions q ON q.id = taq.question_id
+       LEFT JOIN own_serve ON own_serve.question_id = q.id
+       WHERE taq.attempt_id = ? AND taq.section = ? AND taq.module = ?
+       ORDER BY taq.order_index`,
+    )
+    .all(attemptId, attemptId, attemptId, section, module) as (QuestionRow & {
+    order_index: number;
+    was_recycled: number;
+  })[];
+
+  return rows.map((row) => {
+    const { order_index, was_recycled, ...question } = row;
+    return {
+      orderIndex: order_index,
+      question: { ...question, wasRecycled: was_recycled === 1 },
+    };
+  });
+}
+
+/**
  * Scores a section's submitted Module 1 (Story 2.4), stores the routed difficulty
  * path on the attempt, assembles Module 2 from that path's difficulty mix, and
  * persists it (module=2). Never surfaces the routing decision to the user -- it's
  * stored purely for the assembly/scoring engine.
+ *
+ * Requires that section's Module 1 to have been finalized (`finalizeModule1`, or the
+ * `submitModule1Answers` wrapper) -- otherwise it throws instead of scoring a module
+ * of nulls as 0/27 and permanently routing the student to the "easier" pool.
+ *
+ * Idempotent: if Module 2 already exists for (attempt, section), the stored questions
+ * and the stored path are returned as-is, with no re-scoring, no re-assembly and no
+ * second set of rows. The `correctCount`/`totalCount`/`rawScore` half of the result is
+ * recomputed via `scoreModule1` (pure, no side effects), but `path` is read from the
+ * attempt row rather than recomputed, so a re-read can never report a path that
+ * disagrees with the Module 2 that was actually assembled and served.
+ *
+ * The whole body is one transaction, so a throw from `assembleModuleForSection` rolls
+ * back the stored routing path, any partially inserted questions, and the
+ * `question_serve_log` rows `selectQuestions` had already written.
  */
 export function assembleModule2ForSection(
   db: Database.Database,
   attemptId: number,
   section: Section,
 ): Module2Result {
-  const score = scoreModule1(db, attemptId, section);
+  const pathColumn = MODULE2_PATH_COLUMN[section];
+  const submittedAtColumn = MODULE1_SUBMITTED_AT_COLUMN[section];
 
-  const column = MODULE2_PATH_COLUMN[section];
-  db.prepare(`UPDATE test_attempts SET ${column} = ? WHERE id = ?`).run(score.path, attemptId);
+  const run = db.transaction((): Module2Result => {
+    const attempt = db
+      .prepare(
+        `SELECT ${submittedAtColumn} AS module1SubmittedAt, ${pathColumn} AS storedPath
+         FROM test_attempts WHERE id = ?`,
+      )
+      .get(attemptId) as { module1SubmittedAt: string | null; storedPath: string | null } | undefined;
 
-  // Hard-exclude every question this section's Module 1 already used in this same
-  // attempt, so Module 2 can never repeat one of them (see moduleAssembly.ts's
-  // AssembleParams.excludeIds doc comment).
-  const alreadyUsed = db
-    .prepare("SELECT question_id FROM test_attempt_questions WHERE attempt_id = ? AND section = ?")
-    .all(attemptId, section) as { question_id: string }[];
+    if (!attempt) {
+      throw new Error(`Attempt ${attemptId} does not exist`);
+    }
+    if (attempt.module1SubmittedAt == null) {
+      throw new Error(
+        `Module 1 for section "${section}" has not been submitted yet for attempt ${attemptId} -- ` +
+          `call finalizeModule1 (or submitModule1Answers) first; scoring an unsubmitted module ` +
+          `would route Module 2 off an incomplete answer set`,
+      );
+    }
 
-  const mix = MODULE2_DIFFICULTY_MIX[score.path as DifficultyPath];
-  const module2Questions = assembleModuleForSection(db, {
-    section,
-    module: 2,
-    mix,
-    attemptId,
-    excludeIds: alreadyUsed.map((r) => r.question_id),
+    const score = scoreModule1(db, attemptId, section);
+
+    const existing = db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM test_attempt_questions WHERE attempt_id = ? AND section = ? AND module = 2",
+      )
+      .get(attemptId, section) as { count: number };
+
+    if (existing.count > 0) {
+      // Already assembled -- return what was actually served, never a second module.
+      // `path` comes from the stored column (falling back to the freshly computed one
+      // only for rows written before assembly was atomic, where the path could in
+      // principle be missing); the counts come from the pure re-score.
+      return {
+        ...score,
+        path: (attempt.storedPath as DifficultyPath | null) ?? score.path,
+        questions: readAssembledModule(db, attemptId, section, 2),
+      };
+    }
+
+    db.prepare(`UPDATE test_attempts SET ${pathColumn} = ? WHERE id = ?`).run(score.path, attemptId);
+
+    // Hard-exclude every question this section's Module 1 already used in this same
+    // attempt, so Module 2 can never repeat one of them (see moduleAssembly.ts's
+    // AssembleParams.excludeIds doc comment).
+    const alreadyUsed = db
+      .prepare("SELECT question_id FROM test_attempt_questions WHERE attempt_id = ? AND section = ?")
+      .all(attemptId, section) as { question_id: string }[];
+
+    const mix = MODULE2_DIFFICULTY_MIX[score.path as DifficultyPath];
+    const module2Questions = assembleModuleForSection(db, {
+      section,
+      module: 2,
+      mix,
+      attemptId,
+      excludeIds: alreadyUsed.map((r) => r.question_id),
+    });
+    const questions = insertModuleQuestions(db, attemptId, section, 2, module2Questions);
+
+    return { ...score, questions };
   });
-  const questions = insertModuleQuestions(db, attemptId, section, 2, module2Questions);
 
-  return { ...score, questions };
+  return run();
 }
