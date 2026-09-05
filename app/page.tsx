@@ -1,10 +1,18 @@
+import { listAttempts } from "@/lib/attemptState";
 import { getDb } from "@/lib/db";
+import { connection } from "next/server";
+import { AttemptHistory } from "./_components/home/AttemptHistory";
+import { DrillModeStub } from "./_components/home/DrillModeStub";
+import { StartTestButton } from "./_components/home/StartTestButton";
 
-export default function Home() {
+export default async function Home() {
+  await connection();
   const db = getDb();
   const { count } = db
     .prepare("SELECT COUNT(*) AS count FROM questions")
     .get() as { count: number };
+  const attempts = listAttempts(db);
+  const hasResumableAttempt = attempts.some((attempt) => attempt.resumable);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -17,28 +25,20 @@ export default function Home() {
         </span>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-16 text-center">
         <h1 className="text-2xl font-semibold">Digital SAT Practice</h1>
         <p className="max-w-md text-sm leading-6 text-gray-600 dark:text-gray-400">
-          Project scaffold is running: Next.js, Tailwind, and SQLite are wired
-          up end to end. The database is connected and migrated —{" "}
+          Take a full-length practice test with timed modules, flagging, and review —{" "}
           <strong className="font-semibold text-foreground">
             {count} question{count === 1 ? "" : "s"}
           </strong>{" "}
-          currently loaded.
+          in the bank.
         </p>
 
-        <button
-          type="button"
-          disabled
-          className="rounded-full bg-accent px-6 py-2 text-sm font-medium text-accent-foreground opacity-60"
-        >
-          Start new test (coming soon)
-        </button>
+        <StartTestButton hasResumableAttempt={hasResumableAttempt} />
+        <DrillModeStub />
 
-        <span className="rounded bg-highlight px-2 py-0.5 text-xs font-medium text-highlight-foreground">
-          highlighter accent preview
-        </span>
+        <AttemptHistory attempts={attempts} />
       </main>
     </div>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { MarkdownContent } from "./question/MarkdownContent";
+
 export interface ChoiceRowProps {
   letter: "A" | "B" | "C" | "D";
   text: string;
@@ -52,7 +54,7 @@ export function ChoiceRow({
         >
           {letter}
         </span>
-        <span className="flex-1">{text}</span>
+        <MarkdownContent className="flex-1 [&_p]:m-0">{text}</MarkdownContent>
       </button>
 
       <button

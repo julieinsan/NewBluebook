@@ -7,6 +7,7 @@ test("RwQuestionLayout renders two-pane passage and choices", () => {
   render(
     <RwQuestionLayout
       passage={RW_PASSAGE.stimulusText}
+      questionStem={RW_MC_QUESTION.stimulusText}
       question={RW_MC_QUESTION}
       selectedLetter="C"
     />,

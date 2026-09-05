@@ -7,7 +7,7 @@ test("MathQuestionLayout renders multiple-choice math with a figure", () => {
   render(<MathQuestionLayout question={MATH_MC_QUESTION} selectedLetter="B" />);
   expect(screen.getByTestId("math-layout")).toBeDefined();
   expect(screen.getByRole("img")).toBeDefined();
-  expect(screen.getByText("$5$")).toBeDefined();
+  expect(document.querySelector(".katex")).toBeTruthy();
 });
 
 test("MathQuestionLayout renders grid-in input", () => {

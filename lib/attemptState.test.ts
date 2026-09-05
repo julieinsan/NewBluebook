@@ -129,6 +129,10 @@ function endModule(
   module: ModuleNumber,
 ): void {
   stamp(db, attemptId, moduleSubmittedAtColumn(section, module));
+  // endModule1 stamps the next module's clock in the same transition.
+  if (module === 1) {
+    startModule(db, attemptId, section, 2);
+  }
 }
 
 function positionOf(db: Database.Database, attemptId: number): ModulePosition {
@@ -306,6 +310,98 @@ test("resolveCurrentPosition is pure over AttemptState -- no DB, no clock", () =
     kind: "module",
     section: "rw",
     module: 2,
+  });
+});
+
+test("resolveCurrentPosition stays on Module 1 when Module 2's clock has not started", () => {
+  const state = {
+    attemptId: 8,
+    status: "in_progress" as const,
+    startedAt: "2026-09-05 09:00:00",
+    submittedAt: null,
+    breakStartedAt: null,
+    rw: {
+      section: "rw" as const,
+      module1StartedAt: "2026-09-05 09:00:00",
+      module1SubmittedAt: "2026-09-05 09:32:00",
+      module2StartedAt: null,
+      module2SubmittedAt: null,
+      module2DifficultyPath: null,
+    },
+    math: {
+      section: "math" as const,
+      module1StartedAt: null,
+      module1SubmittedAt: null,
+      module2StartedAt: null,
+      module2SubmittedAt: null,
+      module2DifficultyPath: null,
+    },
+  };
+
+  assert.deepEqual(resolveCurrentPosition(state), {
+    kind: "module",
+    section: "rw",
+    module: 1,
+  });
+});
+
+test("resolveCurrentPosition routes to the break when R&W is done even if math_module1_submitted_at is stale", () => {
+  const state = {
+    attemptId: 6,
+    status: "in_progress" as const,
+    startedAt: "2026-09-05 09:00:00",
+    submittedAt: null,
+    breakStartedAt: "2026-09-05 18:03:37",
+    rw: {
+      section: "rw" as const,
+      module1StartedAt: "2026-09-05 09:00:00",
+      module1SubmittedAt: "2026-09-05 15:40:34",
+      module2StartedAt: "2026-09-05 17:55:24",
+      module2SubmittedAt: "2026-09-05 18:03:37",
+      module2DifficultyPath: "easier" as const,
+    },
+    math: {
+      section: "math" as const,
+      module1StartedAt: null,
+      module1SubmittedAt: "2026-09-05 15:40:34",
+      module2StartedAt: null,
+      module2SubmittedAt: null,
+      module2DifficultyPath: null,
+    },
+  };
+
+  assert.deepEqual(resolveCurrentPosition(state), { kind: "break" });
+});
+
+test("resolveCurrentPosition stays on Math Module 1 when Module 2's clock has not started", () => {
+  const state = {
+    attemptId: 9,
+    status: "in_progress" as const,
+    startedAt: "2026-09-05 09:00:00",
+    submittedAt: null,
+    breakStartedAt: "2026-09-05 11:00:00",
+    rw: {
+      section: "rw" as const,
+      module1StartedAt: "2026-09-05 09:00:00",
+      module1SubmittedAt: "2026-09-05 09:32:00",
+      module2StartedAt: "2026-09-05 09:32:00",
+      module2SubmittedAt: "2026-09-05 10:04:00",
+      module2DifficultyPath: "easier" as const,
+    },
+    math: {
+      section: "math" as const,
+      module1StartedAt: "2026-09-05 11:01:00",
+      module1SubmittedAt: "2026-09-05 11:36:00",
+      module2StartedAt: null,
+      module2SubmittedAt: null,
+      module2DifficultyPath: null,
+    },
+  };
+
+  assert.deepEqual(resolveCurrentPosition(state), {
+    kind: "module",
+    section: "math",
+    module: 1,
   });
 });
 

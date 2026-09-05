@@ -7,6 +7,7 @@ import { MarkdownContent } from "./MarkdownContent";
 export interface RwQuestionLayoutProps {
   passage: string;
   question: RunnerQuestion;
+  questionStem?: string;
   selectedLetter?: string | null;
   onSelectChoice?: (letter: "A" | "B" | "C" | "D") => void;
   onToggleFlag?: () => void;
@@ -17,6 +18,7 @@ export interface RwQuestionLayoutProps {
 export function RwQuestionLayout({
   passage,
   question,
+  questionStem,
   selectedLetter,
   onSelectChoice,
   onToggleFlag,
@@ -36,7 +38,7 @@ export function RwQuestionLayout({
 
       <section className="overflow-y-auto p-6" aria-label="Question">
         <MarkdownContent className="mb-6 text-sm leading-relaxed">
-          {question.stimulusText}
+          {questionStem ?? question.stimulusText}
         </MarkdownContent>
         <div className="flex flex-col gap-3">
           {question.choices.map((choice) => (

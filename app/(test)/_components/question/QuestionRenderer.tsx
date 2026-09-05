@@ -4,6 +4,7 @@ import type { Section } from "@/lib/blueprint";
 import type { RunnerQuestion } from "@/lib/testFlow";
 import { MathQuestionLayout } from "./MathQuestionLayout";
 import { RwQuestionLayout } from "./RwQuestionLayout";
+import { splitRwStimulus } from "./splitRwStimulus";
 
 export interface QuestionRendererProps {
   section: Section;
@@ -31,9 +32,14 @@ export function QuestionRenderer({
   onToggleCrossOut,
 }: QuestionRendererProps) {
   if (section === "rw") {
+    const split = passageText
+      ? { passage: passageText, questionStem: question.stimulusText }
+      : splitRwStimulus(question.stimulusText);
+
     return (
       <RwQuestionLayout
-        passage={passageText ?? question.stimulusText}
+        passage={split.passage}
+        questionStem={split.questionStem}
         question={question}
         selectedLetter={selectedLetter}
         onSelectChoice={onSelectChoice}

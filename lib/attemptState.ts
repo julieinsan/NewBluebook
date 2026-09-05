@@ -213,16 +213,28 @@ export function resolveCurrentPosition(state: AttemptState): ModulePosition {
   if (state.rw.module1SubmittedAt == null) {
     return { kind: "module", section: "rw", module: 1 };
   }
+
   if (state.rw.module2SubmittedAt == null) {
+    // Module 2's clock is stamped by endModule1; without it the transition did not finish.
+    if (state.rw.module2StartedAt == null) {
+      return { kind: "module", section: "rw", module: 1 };
+    }
     return { kind: "module", section: "rw", module: 2 };
   }
 
   // R&W is done. The break runs until `end-break` starts Math's clock (see above).
-  if (state.math.module1StartedAt == null && state.math.module1SubmittedAt == null) {
+  // Key off math_module1_started_at only — not math_module1_submitted_at, which must
+  // never be set before Math begins but can be stale in a partially-written row.
+  if (state.math.module1StartedAt == null) {
     return { kind: "break" };
   }
 
   if (state.math.module1SubmittedAt == null) {
+    return { kind: "module", section: "math", module: 1 };
+  }
+
+  // Same rule as R&W Module 2: do not route into Module 2 until its clock has started.
+  if (state.math.module2StartedAt == null) {
     return { kind: "module", section: "math", module: 1 };
   }
   return { kind: "module", section: "math", module: 2 };
