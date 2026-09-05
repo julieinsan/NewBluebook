@@ -396,7 +396,7 @@ Wave 3  ✅  3.1–3.3  (+ pause/resume, D13)
 Wave 4       4.1 ✅   4.2 ⬜ manual QA
 ```
 
-Epic 3 closes when Task 4.2 passes. Next epic: **Epic 4 — In-Test Tools** (PRD Stories 4.1–4.4).
+Epic 3 closes when Task 4.2 passes. Next epic: **Epic 4 — In-Test Tools** (PRD Stories 4.1–4.2 shipped; 4.3–4.4 deferred).
 
 ### Task 4.2 manual QA checklist
 
@@ -412,7 +412,7 @@ Run `npm run dev`, walk a full attempt in the browser:
 8. **Pause (D13):** Pause from runner, review, and break → home; timer frozen; resume → same module/break with same remaining time; answers blocked while paused
 9. **Visual (PRD §8):** Top/bottom bars, two-pane R&W, single-pane Math, blue accent palette
 
-Known deferrals (not Epic 3): Math calculator and reference sheet (Epic 4.3/4.4); cross-out UI (Epic 4.1).
+Known deferrals (not Epic 3): Math calculator and reference sheet (Epic 4.3/4.4 — **deferred, not shipping in v1**); cross-out UI and highlighter delivered in Epic 4 Waves 1–2.
 
 ---
 

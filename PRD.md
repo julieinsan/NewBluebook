@@ -12,13 +12,14 @@ A single-user, locally-run clone of the College Board Bluebook digital SAT testi
 
 **Goals**
 - Faithfully reproduce the *structure* of a real digital SAT: two sections (Reading & Writing, Math), each split into two timed modules, with Module 2's difficulty adaptively routed based on Module 1 performance.
-- Reproduce the in-test tools called out in the Bluebook guide: timer, flagging, review screen, answer elimination, highlighter/annotation (R&W), Desmos calculator + reference sheet (Math).
+- Reproduce the in-test tools shipped in this build: timer, flagging, review screen, answer elimination, and highlighter (R&W).
 - Score attempts with an approximate 200–800 per-section / 400–1600 total scale, plus a domain-level performance view styled after the real score report.
 - Support an untimed drill mode for targeted domain/skill practice.
 - Track how much time the user spends on each question (practice tests and drill sessions), persisted locally for later review and pacing analysis.
 - Run entirely locally for one user — no accounts, no hosted backend.
 
 **Non-goals (out of scope for this build)**
+- Desmos graphing calculator and digital reference sheet (Math) — present in real Bluebook but deferred; users can use an external calculator or reference if needed.
 - Exact official College Board scoring/equating tables (proprietary, not available — we approximate).
 - The "Career Insights Snapshot" feature from the score report.
 - Multi-user accounts, auth, or an admin/teacher view.
@@ -87,7 +88,8 @@ Dividing bank size by per-test need, per domain:
 |---|---|
 | Audience | Single user, no accounts |
 | Fidelity | Full adaptive clone (real MST structure, not a static test or simple quiz runner) |
-| In-test tools in scope | Timer/nav/flagging/review screen, answer elimination, highlighter/annotation (R&W), Desmos + reference sheet (Math) |
+| In-test tools in scope | Timer/nav/flagging/review screen, answer elimination, highlighter (R&W, yellow only; notes deferred) |
+| In-test tools deferred | Desmos calculator + digital reference sheet (Math) — not shipping in v1 |
 | Tech stack | Next.js (React + TypeScript), local SQLite via `better-sqlite3`, no hosted backend — runs via `npm run dev` |
 | Scoring | Approximate 200-800/section, 400-1600 total, built from a plausible curve (not official equating tables) |
 | Question reuse | No repeats until a domain is exhausted, then recycle least-recently-used, flagged as "seen before" |
@@ -255,14 +257,16 @@ Organized as epics, each broken into independently implementable user stories wi
 **Story 4.1: Answer elimination (cross-out)**
 *As a user, I want to cross out answer choices I've ruled out, so that I can narrow down multiple-choice questions like in real Bluebook.*
 
-**Story 4.2: Highlighter & annotation (R&W)**
-*As a user, I want to highlight passage text and attach short notes, so that I can mark evidence and track my reasoning during R&W questions.*
+**Story 4.2: Highlighter (R&W)**
+*As a user, I want to highlight passage text, so that I can mark evidence during R&W questions.*
+- Yellow highlights on the passage pane only; annotation notes deferred.
 
-**Story 4.3: Desmos calculator (Math)**
+**Deferred (not shipping in v1)**
+
+**Story 4.3: Desmos calculator (Math)** — *deferred*
 *As a user, I want an embedded Desmos graphing calculator available throughout the Math module, so that I can graph, solve, and check my work as in real Bluebook.*
-- Uses the official Desmos API embed (free tier).
 
-**Story 4.4: Digital reference sheet (Math)**
+**Story 4.4: Digital reference sheet (Math)** — *deferred*
 *As a user, I want a reference sheet of common formulas accessible via a button during Math, so that I don't need to memorize them.*
 
 ---
@@ -321,6 +325,7 @@ Organized as epics, each broken into independently implementable user stories wi
 1. **Adaptive threshold:** ≥60% Module 1 → harder-path confirmed as reasonable.
 2. **Bank capacity:** "1 guaranteed fresh full test, then recycling starts" (Section 3.3) confirmed acceptable — no need to shrink test length to stretch content further.
 3. **Visual style:** should draw from the real Bluebook app's look (referenced a YouTube walkthrough, which could not be watched directly — no tool available to extract video frames/transcript). Styled instead from general knowledge of the real app's design language; see Section 8. User can correct specifics once the build is visible.
+4. **Math tools:** Desmos calculator and digital reference sheet are **out of scope for v1**. Epic 4 ships cross-out and highlighter only; Math modules use the same top bar as R&W (no calculator/reference icon buttons).
 
 ## 8. Visual Style Reference
 
@@ -342,7 +347,7 @@ The real Bluebook app is deliberately sober and "clinical" — designed to not d
 **Layout**
 - Fixed top bar: small logo mark (left), section/module name, a centered countdown timer (togglable hidden/shown), overflow "more" menu (right)
 - R&W questions: two-pane split — passage/stimulus scrolls on the left, question stem + lettered (A–D) choices on the right
-- Math questions: single-pane, problem + choices or grid-in input, calculator and reference-sheet buttons available via icon buttons near the top
+- Math questions: single-pane, problem + choices or grid-in input (no in-app calculator or reference sheet in v1)
 - Answer choices: each choice is a full-width selectable row/oval, not a bare radio dot; a per-choice cross-out toggle (answer eliminator) sits near each choice, not in a separate global mode
 - Fixed bottom bar: Back (left) and Next (right) as filled, pill-shaped blue buttons; a simple "Question X of Y" indicator that expands into the full review grid (numbered bubbles: answered/unanswered/flagged states, click to jump)
 - Overall: flat design, rounded-corner buttons, circular icon buttons for tools, generous white space, no visual clutter

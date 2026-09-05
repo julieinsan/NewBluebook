@@ -98,8 +98,10 @@ From Epic 4 plan §6:
 
 1. Cross-out — done in Wave 1
 2. **Highlighter** — select passage on R&W; add/remove highlights; refresh preserves; stem not highlightable
-3. Calculator / reference sheet — Wave 3 (not started)
-4. Regression — flagging, autosave, timer, pause/resume, review grid
+3. Regression — flagging, autosave, timer, pause/resume, review grid
+4. **Math modules** — confirm no calculator/reference buttons (math tools deferred)
+
+~~Calculator / reference sheet~~ — out of scope for v1 (PRD non-goals, Epic 4 D13)
 
 For home test selection:
 
@@ -110,6 +112,5 @@ For home test selection:
 
 ## Suggested next steps
 
-- Epic 4 Wave 3 — Math tools (Desmos calculator, reference sheet)
-- Epic 4 Wave 4 — full gate + manual QA walk-through
-- Epic 5 — review-screen "seen before" badge for recycled questions
+- Epic 4 Wave 3 — verification gate (automated tests + manual QA walk-through for cross-out, highlighter, regression)
+- Epic 5 — scoring, results dashboard, and review-screen "seen before" badge for recycled questions
