@@ -34,7 +34,8 @@ export function ReviewGrid({ questions, currentIndex, onSelectQuestion }: Review
             role="listitem"
             className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full border text-sm font-medium ${STATE_CLASSES[state]}`}
             aria-current={index === currentIndex ? "true" : undefined}
-            aria-label={`Question ${question.number}${question.flagged ? ", flagged" : ""}${question.userAnswer ? ", answered" : ", unanswered"}`}
+            aria-label={`Question ${question.number}, ${question.id}${question.flagged ? ", flagged" : ""}${question.userAnswer ? ", answered" : ", unanswered"}`}
+            title={question.id}
             onClick={() => onSelectQuestion?.(index)}
           >
             {question.number}

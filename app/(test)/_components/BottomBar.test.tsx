@@ -13,6 +13,7 @@ test("BottomBar shows question progress and navigation buttons", () => {
     />,
   );
   expect(screen.getByText("Question 1 of 3")).toBeDefined();
+  expect(screen.getByText("ID: q-1")).toBeDefined();
   expect(screen.getByRole("button", { name: "Back" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Next" })).toBeDefined();
 });
@@ -27,6 +28,6 @@ test("BottomBar expands the review grid", () => {
     />,
   );
   fireEvent.click(screen.getByText("Question 2 of 3"));
-  fireEvent.click(screen.getByRole("listitem", { name: /Question 3, unanswered/ }));
+  fireEvent.click(screen.getByRole("listitem", { name: /Question 3, q-3, unanswered/ }));
   expect(onJump).toHaveBeenCalledWith(2);
 });

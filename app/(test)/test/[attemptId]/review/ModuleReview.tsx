@@ -1,6 +1,7 @@
 "use client";
 
 import { ConfirmDialog } from "@/app/(test)/_components/ConfirmDialog";
+import { QuestionIdLabel } from "@/app/(test)/_components/QuestionIdLabel";
 import { ReviewGrid } from "@/app/(test)/_components/ReviewGrid";
 import { TopBar } from "@/app/(test)/_components/TopBar";
 import { runnerPath, type RunnerModule } from "@/lib/testFlow";
@@ -70,9 +71,12 @@ export function ModuleReview({ runnerModule }: ModuleReviewProps) {
           ) : (
             <ul className="mt-2 space-y-1 text-sm">
               {flagged.map((q) => (
-                <li key={q.id}>
-                  Question {q.number}
-                  {isUnanswered(q) ? " — unanswered" : ""}
+                <li key={q.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span>
+                    Question {q.number}
+                    {isUnanswered(q) ? " — unanswered" : ""}
+                  </span>
+                  <QuestionIdLabel id={q.id} />
                 </li>
               ))}
             </ul>
@@ -88,7 +92,10 @@ export function ModuleReview({ runnerModule }: ModuleReviewProps) {
           ) : (
             <ul className="mt-2 space-y-1 text-sm">
               {unanswered.map((q) => (
-                <li key={q.id}>Question {q.number}</li>
+                <li key={q.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span>Question {q.number}</span>
+                  <QuestionIdLabel id={q.id} />
+                </li>
               ))}
             </ul>
           )}

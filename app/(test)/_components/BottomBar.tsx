@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { RunnerQuestion } from "@/lib/testFlow";
+import { QuestionIdLabel } from "./QuestionIdLabel";
 import { ReviewGrid } from "./ReviewGrid";
 
 export interface BottomBarProps {
@@ -56,14 +57,17 @@ export function BottomBar({
           Back
         </button>
 
-        <button
-          type="button"
-          className="text-sm font-medium underline-offset-2 hover:underline"
-          onClick={() => setGridOpen((open) => !open)}
-          aria-expanded={gridOpen}
-        >
-          Question {current?.number ?? currentIndex + 1} of {questions.length}
-        </button>
+        <div className="flex flex-col items-center gap-0.5">
+          <button
+            type="button"
+            className="text-sm font-medium underline-offset-2 hover:underline"
+            onClick={() => setGridOpen((open) => !open)}
+            aria-expanded={gridOpen}
+          >
+            Question {current?.number ?? currentIndex + 1} of {questions.length}
+          </button>
+          {current && <QuestionIdLabel id={current.id} />}
+        </div>
 
         <button
           type="button"

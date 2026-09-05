@@ -20,6 +20,8 @@ test("ModuleReview shows flagged and unanswered counts", () => {
   render(<ModuleReview runnerModule={runnerModule} />);
   expect(screen.getByText(/Flagged \(1\)/)).toBeDefined();
   expect(screen.getByText(/Unanswered \(2\)/)).toBeDefined();
+  expect(screen.getAllByText("ID: q-2")).toHaveLength(2);
+  expect(screen.getByText("ID: q-3")).toBeDefined();
 });
 
 test("ModuleReview opens confirm dialog on submit click", () => {
