@@ -139,6 +139,17 @@ function positionOf(db: Database.Database, attemptId: number): ModulePosition {
   return resolveCurrentPosition(getAttemptState(db, attemptId));
 }
 
+/** Default pause fields for hand-built AttemptState fixtures. */
+const PAUSE_FIELDS = {
+  pausedAt: null,
+  pausedPhase: null,
+  rwModule1PauseSeconds: 0,
+  rwModule2PauseSeconds: 0,
+  breakPauseSeconds: 0,
+  mathModule1PauseSeconds: 0,
+  mathModule2PauseSeconds: 0,
+} as const;
+
 // ---------------------------------------------------------------------------
 // getAttemptState
 // ---------------------------------------------------------------------------
@@ -288,6 +299,7 @@ test("resolveCurrentPosition is pure over AttemptState -- no DB, no clock", () =
     startedAt: "2026-09-05 09:00:00",
     submittedAt: null,
     breakStartedAt: null,
+    ...PAUSE_FIELDS,
     rw: {
       section: "rw" as const,
       module1StartedAt: "2026-09-05 09:00:00",
@@ -320,6 +332,7 @@ test("resolveCurrentPosition stays on Module 1 when Module 2's clock has not sta
     startedAt: "2026-09-05 09:00:00",
     submittedAt: null,
     breakStartedAt: null,
+    ...PAUSE_FIELDS,
     rw: {
       section: "rw" as const,
       module1StartedAt: "2026-09-05 09:00:00",
@@ -352,6 +365,7 @@ test("resolveCurrentPosition routes to the break when R&W is done even if math_m
     startedAt: "2026-09-05 09:00:00",
     submittedAt: null,
     breakStartedAt: "2026-09-05 18:03:37",
+    ...PAUSE_FIELDS,
     rw: {
       section: "rw" as const,
       module1StartedAt: "2026-09-05 09:00:00",
@@ -380,6 +394,7 @@ test("resolveCurrentPosition stays on Math Module 1 when Module 2's clock has no
     startedAt: "2026-09-05 09:00:00",
     submittedAt: null,
     breakStartedAt: "2026-09-05 11:00:00",
+    ...PAUSE_FIELDS,
     rw: {
       section: "rw" as const,
       module1StartedAt: "2026-09-05 09:00:00",

@@ -21,7 +21,14 @@ beforeEach(() => {
 
 test("BreakScreen calls end-break on resume", async () => {
   render(
-    <BreakScreen attemptId={1} breakStartedAt="2026-09-05 14:00:00" />,
+    <BreakScreen
+      attemptId={1}
+      timer={{
+        deadline: Date.UTC(2026, 8, 5, 14, 10, 0),
+        serverNow: Date.UTC(2026, 8, 5, 14, 5, 0),
+        durationSeconds: 600,
+      }}
+    />,
   );
   fireEvent.click(screen.getByRole("button", { name: /Resume testing/i }));
 

@@ -12,7 +12,8 @@ export default async function Home() {
     .prepare("SELECT COUNT(*) AS count FROM questions")
     .get() as { count: number };
   const attempts = listAttempts(db);
-  const hasResumableAttempt = attempts.some((attempt) => attempt.resumable);
+  const resumable = attempts.find((attempt) => attempt.resumable);
+  const hasResumableAttempt = resumable != null;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -35,7 +36,10 @@ export default async function Home() {
           in the bank.
         </p>
 
-        <StartTestButton hasResumableAttempt={hasResumableAttempt} />
+        <StartTestButton
+          hasResumableAttempt={hasResumableAttempt}
+          resumableIsPaused={resumable?.isPaused ?? false}
+        />
         <DrillModeStub />
 
         <AttemptHistory attempts={attempts} />

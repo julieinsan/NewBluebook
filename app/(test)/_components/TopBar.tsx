@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PauseAndExitMenu } from "@/app/(test)/_components/PauseAndExitMenu";
 import { secondsRemaining } from "@/lib/testFlow";
 import type { Section } from "@/lib/blueprint";
 import type { ModuleNumber } from "@/lib/blueprint";
@@ -20,18 +21,18 @@ export interface TopBarProps {
   section: Section;
   module: ModuleNumber;
   timer: TimerInfo;
+  attemptId?: number;
   timerVisible?: boolean;
   onTimerVisibilityChange?: (visible: boolean) => void;
-  onMoreMenuClick?: () => void;
 }
 
 export function TopBar({
   section,
   module,
   timer,
+  attemptId,
   timerVisible: timerVisibleProp = true,
   onTimerVisibilityChange,
-  onMoreMenuClick,
 }: TopBarProps) {
   const [timerVisible, setTimerVisible] = useState(timerVisibleProp);
 
@@ -40,6 +41,7 @@ export function TopBar({
   );
 
   useEffect(() => {
+    if (timer.paused) return;
     const offset = Date.now() - timer.serverNow;
     const tick = () => {
       setRemaining(secondsRemaining(timer.deadline, Date.now() - offset));
@@ -47,7 +49,7 @@ export function TopBar({
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [timer.deadline, timer.serverNow]);
+  }, [timer.deadline, timer.paused, timer.serverNow]);
 
   return (
     <header
@@ -71,9 +73,10 @@ export function TopBar({
           <time
             className="font-mono text-sm tabular-nums"
             aria-live="polite"
-            aria-label="Time remaining"
+            aria-label={timer.paused ? "Time remaining (paused)" : "Time remaining"}
           >
             {formatCountdown(remaining)}
+            {timer.paused ? " · Paused" : ""}
           </time>
         ) : (
           <span className="text-sm text-foreground/50" aria-hidden>Timer hidden</span>
@@ -93,14 +96,18 @@ export function TopBar({
         >
           {timerVisible ? "Hide" : "Show"} timer
         </button>
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-foreground/20 hover:bg-background-subtle"
-          aria-label="More options"
-          onClick={onMoreMenuClick}
-        >
-          ⋯
-        </button>
+        {attemptId != null ? (
+          <PauseAndExitMenu attemptId={attemptId} />
+        ) : (
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-foreground/20 hover:bg-background-subtle"
+            aria-label="More options"
+            disabled
+          >
+            ⋯
+          </button>
+        )}
       </div>
     </header>
   );

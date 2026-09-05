@@ -105,6 +105,7 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
   }, [attemptId, flushAll, module, router, section]);
 
   useEffect(() => {
+    if (timer.paused) return;
     const offset = Date.now() - timer.serverNow;
     const tick = () => {
       const remaining = secondsRemaining(timer.deadline, Date.now() - offset);
@@ -115,7 +116,7 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [handleAutoSubmit, timer.deadline, timer.serverNow]);
+  }, [handleAutoSubmit, timer.deadline, timer.paused, timer.serverNow]);
 
   const selectedLetter =
     currentQuestion?.questionType === "mc" ? (currentQuestion.userAnswer as "A" | "B" | "C" | "D" | null) : null;
@@ -126,6 +127,7 @@ export function ModuleRunner({ runnerModule }: ModuleRunnerProps) {
         section={section}
         module={module}
         timer={timer}
+        attemptId={attemptId}
         timerVisible={timerVisible}
         onTimerVisibilityChange={setTimerVisible}
       />

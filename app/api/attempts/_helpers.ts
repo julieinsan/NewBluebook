@@ -43,6 +43,7 @@ export function handleRouteError(err: unknown): NextResponse {
       /is not part of attempt/.test(err.message) ||
       /has not been started/.test(err.message) ||
       /has not started/.test(err.message) ||
+      /cannot be paused/.test(err.message) ||
       /Invalid/.test(err.message)
     ) {
       return errorResponse(err.message, 400);

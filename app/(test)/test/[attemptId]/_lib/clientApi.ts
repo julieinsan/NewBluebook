@@ -83,6 +83,22 @@ export async function postStartAttempt(): Promise<{
   return parseJsonResponse(response);
 }
 
+export async function postPause(attemptId: number): Promise<{ ok: boolean }> {
+  const response = await fetch(`/api/attempts/${attemptId}/pause`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return parseJsonResponse(response);
+}
+
+export async function postResume(attemptId: number): Promise<{ next: string }> {
+  const response = await fetch(`/api/attempts/${attemptId}/resume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return parseJsonResponse(response);
+}
+
 /** Fire-and-forget save for unload — uses keepalive so the browser may complete it. */
 export function postAnswerKeepalive(attemptId: number, payload: AnswerPayload): void {
   void fetch(`/api/attempts/${attemptId}/answers`, {

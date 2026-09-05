@@ -52,7 +52,7 @@ export function ModuleReview({ runnerModule }: ModuleReviewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="module-review">
-      <TopBar section={section} module={module} timer={timer} timerVisible />
+      <TopBar section={section} module={module} timer={timer} attemptId={attemptId} timerVisible />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 overflow-y-auto px-6 py-10">
         <div>

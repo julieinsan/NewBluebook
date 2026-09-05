@@ -1,7 +1,7 @@
 import { getAttemptState, resolvePositionForAttempt } from "@/lib/attemptState";
 import type { ModuleNumber, Section } from "@/lib/blueprint";
 import { getDb } from "@/lib/db";
-import { pathForPosition, samePosition, type ModulePosition } from "@/lib/testFlow";
+import { pathForPosition, samePosition, type ModulePosition, isAttemptPaused } from "@/lib/testFlow";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 
@@ -12,6 +12,13 @@ function handleMissingAttempt(err: unknown): never {
   throw err;
 }
 
+function redirectIfPaused(db: ReturnType<typeof getDb>, attemptId: number): void {
+  const state = getAttemptState(db, attemptId);
+  if (isAttemptPaused(state)) {
+    redirect("/");
+  }
+}
+
 export async function guardModuleRunner(
   attemptId: number,
   section: Section,
@@ -20,6 +27,7 @@ export async function guardModuleRunner(
   await connection();
   const db = getDb();
   try {
+    redirectIfPaused(db, attemptId);
     const position = resolvePositionForAttempt(db, attemptId);
     const expected: ModulePosition = { kind: "module", section, module };
     if (!samePosition(position, expected)) {
@@ -36,6 +44,7 @@ export async function guardReviewPage(
   await connection();
   const db = getDb();
   try {
+    redirectIfPaused(db, attemptId);
     const position = resolvePositionForAttempt(db, attemptId);
     if (position.kind !== "module") {
       redirect(pathForPosition(attemptId, position));
@@ -50,6 +59,7 @@ export async function guardBreakPage(attemptId: number): Promise<void> {
   await connection();
   const db = getDb();
   try {
+    redirectIfPaused(db, attemptId);
     const position = resolvePositionForAttempt(db, attemptId);
     if (position.kind !== "break") {
       redirect(pathForPosition(attemptId, position));
@@ -63,6 +73,7 @@ export async function guardSubmittedPage(attemptId: number): Promise<void> {
   await connection();
   const db = getDb();
   try {
+    redirectIfPaused(db, attemptId);
     const position = resolvePositionForAttempt(db, attemptId);
     if (position.kind !== "submitted") {
       redirect(pathForPosition(attemptId, position));

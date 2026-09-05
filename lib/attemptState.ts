@@ -41,12 +41,17 @@
  */
 import type Database from "better-sqlite3";
 import type { DifficultyPath } from "./adaptiveRouting";
-import type { ModuleNumber, Section } from "./blueprint";
+import { BREAK_DURATION_SECONDS, type ModuleNumber, type Section } from "./blueprint";
 import { readModuleQuestions } from "./attemptService";
 import {
-  moduleDeadline,
+  effectiveModuleDeadline,
+  effectiveNow,
+  modulePausePhase,
   moduleTimeLimitSeconds,
   pathForPosition,
+  pauseSecondsForPhase,
+  isAttemptPaused,
+  effectiveBreakDeadline,
   type AttemptState,
   type AttemptStatus,
   type EpochMillis,
@@ -79,6 +84,13 @@ interface AttemptFlowRow {
   math_module2_started_at: string | null;
   math_module2_submitted_at: string | null;
   math_module2_difficulty_path: DifficultyPath | null;
+  paused_at: string | null;
+  paused_phase: string | null;
+  rw_module1_pause_seconds: number;
+  rw_module2_pause_seconds: number;
+  break_pause_seconds: number;
+  math_module1_pause_seconds: number;
+  math_module2_pause_seconds: number;
 }
 
 /**
@@ -94,7 +106,10 @@ const ATTEMPT_FLOW_COLUMNS = `
   rw_module1_started_at, rw_module1_submitted_at,
   rw_module2_started_at, rw_module2_submitted_at, rw_module2_difficulty_path,
   math_module1_started_at, math_module1_submitted_at,
-  math_module2_started_at, math_module2_submitted_at, math_module2_difficulty_path`;
+  math_module2_started_at, math_module2_submitted_at, math_module2_difficulty_path,
+  paused_at, paused_phase,
+  rw_module1_pause_seconds, rw_module2_pause_seconds, break_pause_seconds,
+  math_module1_pause_seconds, math_module2_pause_seconds`;
 
 function sectionStateFrom(row: AttemptFlowRow, section: Section): SectionState {
   // Written out per section rather than built from `moduleStartedAtColumn(...)` lookups:
@@ -128,6 +143,13 @@ function attemptStateFromRow(row: AttemptFlowRow): AttemptState {
     startedAt: row.started_at,
     submittedAt: row.submitted_at,
     breakStartedAt: row.break_started_at,
+    pausedAt: row.paused_at,
+    pausedPhase: row.paused_phase as AttemptState["pausedPhase"],
+    rwModule1PauseSeconds: row.rw_module1_pause_seconds,
+    rwModule2PauseSeconds: row.rw_module2_pause_seconds,
+    breakPauseSeconds: row.break_pause_seconds,
+    mathModule1PauseSeconds: row.math_module1_pause_seconds,
+    mathModule2PauseSeconds: row.math_module2_pause_seconds,
     rw: sectionStateFrom(row, "rw"),
     math: sectionStateFrom(row, "math"),
   };
@@ -358,10 +380,16 @@ export function getRunnerModule(
     );
   }
 
+  const phase = modulePausePhase(section, module);
+  const pauseSeconds = pauseSecondsForPhase(state, phase);
+  const deadline = effectiveModuleDeadline(section, module, startedAt, pauseSeconds);
+  const clockNow = effectiveNow(now, state.pausedAt, state.pausedPhase, phase);
+
   const timer: TimerInfo = {
-    deadline: moduleDeadline(section, module, startedAt),
-    serverNow: now,
+    deadline,
+    serverNow: clockNow,
     durationSeconds: moduleTimeLimitSeconds(section, module),
+    paused: state.pausedAt != null && state.pausedPhase === phase,
   };
 
   return {
@@ -407,6 +435,8 @@ export interface AttemptSummary {
    * to preserve.
    */
   resumable: boolean;
+  /** True when the student paused and must explicitly resume from home. */
+  isPaused: boolean;
   /** Epic 5 fills this; null for every attempt until scoring exists. */
   totalScaledScore: number | null;
 }
@@ -444,7 +474,33 @@ export function listAttempts(db: Database.Database): AttemptSummary[] {
       position,
       path: pathForPosition(state.attemptId, position),
       resumable: position.kind !== "submitted",
+      isPaused: isAttemptPaused(state),
       totalScaledScore: row.total_scaled_score,
     };
   });
+}
+
+/**
+ * Break countdown payload with pause-adjusted deadline (D8 + migration 0010).
+ */
+export function getBreakTimer(
+  db: Database.Database,
+  attemptId: number,
+  now: EpochMillis = Date.now(),
+): TimerInfo {
+  const state = getAttemptState(db, attemptId);
+  if (state.breakStartedAt == null) {
+    throw new Error(`Attempt ${attemptId} has no break_started_at stamp`);
+  }
+
+  const pauseSeconds = pauseSecondsForPhase(state, "break");
+  const deadline = effectiveBreakDeadline(state.breakStartedAt, pauseSeconds);
+  const clockNow = effectiveNow(now, state.pausedAt, state.pausedPhase, "break");
+
+  return {
+    deadline,
+    serverNow: clockNow,
+    durationSeconds: BREAK_DURATION_SECONDS,
+    paused: state.pausedAt != null && state.pausedPhase === "break",
+  };
 }

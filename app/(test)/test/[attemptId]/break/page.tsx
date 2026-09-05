@@ -1,4 +1,6 @@
-import { guardBreakPage, readBreakStartedAt } from "../_lib/guardPosition";
+import { getBreakTimer } from "@/lib/attemptState";
+import { getDb } from "@/lib/db";
+import { guardBreakPage } from "../_lib/guardPosition";
 import { BreakScreen } from "./BreakScreen";
 import { notFound } from "next/navigation";
 
@@ -18,9 +20,8 @@ export default async function BreakPage({
   if (attemptId == null) notFound();
 
   await guardBreakPage(attemptId);
-  const breakStartedAt = await readBreakStartedAt(attemptId);
+  const db = getDb();
+  const timer = getBreakTimer(db, attemptId);
 
-  return (
-    <BreakScreen attemptId={attemptId} breakStartedAt={breakStartedAt} />
-  );
+  return <BreakScreen attemptId={attemptId} timer={timer} />;
 }

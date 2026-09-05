@@ -7,9 +7,14 @@ import { postStartAttempt } from "@/app/(test)/test/[attemptId]/_lib/clientApi";
 export interface StartTestButtonProps {
   /** When true, an in-progress attempt exists — D9 forbids starting a second one. */
   hasResumableAttempt?: boolean;
+  /** When true, the resumable attempt is paused rather than actively running. */
+  resumableIsPaused?: boolean;
 }
 
-export function StartTestButton({ hasResumableAttempt = false }: StartTestButtonProps) {
+export function StartTestButton({
+  hasResumableAttempt = false,
+  resumableIsPaused = false,
+}: StartTestButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +44,9 @@ export function StartTestButton({ hasResumableAttempt = false }: StartTestButton
       </button>
       {hasResumableAttempt && (
         <p className="max-w-sm text-xs text-foreground/70">
-          You have a test in progress. Resume it below to continue where you left off.
+          {resumableIsPaused
+            ? "You have a paused test. Resume it below when you are ready to continue."
+            : "You have a test in progress. Resume it below to continue where you left off."}
         </p>
       )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

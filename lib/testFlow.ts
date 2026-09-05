@@ -204,6 +204,8 @@ export interface TimerInfo {
   serverNow: EpochMillis;
   /** The full allowance, for rendering "32:00" before the first tick. */
   durationSeconds: number;
+  /** True when the attempt is paused on this phase (countdown frozen). */
+  paused?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +243,9 @@ export interface SectionState {
  * Keyed by section name so `state[section]` works directly -- `Section` is `"rw" | "math"`
  * and these two properties are named to match.
  */
+/** Which clock is frozen when the attempt is paused (migration 0010). */
+export type PausePhase = "rw:1" | "rw:2" | "break" | "math:1" | "math:2";
+
 export interface AttemptState {
   attemptId: number;
   status: AttemptStatus;
@@ -250,6 +255,16 @@ export interface AttemptState {
   submittedAt: string | null;
   /** Set when R&W Module 2 ends; drives D8's break countdown. */
   breakStartedAt: string | null;
+  /** When pause began; null = clocks running normally. */
+  pausedAt: string | null;
+  /** Which phase is frozen while `pausedAt` is set. */
+  pausedPhase: PausePhase | null;
+  /** Accumulated pause time per phase, in whole seconds (applied on resume). */
+  rwModule1PauseSeconds: number;
+  rwModule2PauseSeconds: number;
+  breakPauseSeconds: number;
+  mathModule1PauseSeconds: number;
+  mathModule2PauseSeconds: number;
   rw: SectionState;
   math: SectionState;
 }
@@ -277,6 +292,96 @@ export function samePosition(a: ModulePosition, b: ModulePosition): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind !== "module" || b.kind !== "module") return true;
   return a.section === b.section && a.module === b.module;
+}
+
+// ---------------------------------------------------------------------------
+// Pause-adjusted deadlines (practice app; migration 0010)
+// ---------------------------------------------------------------------------
+
+export const PAUSED_AT_COLUMN = "paused_at";
+export const PAUSED_PHASE_COLUMN = "paused_phase";
+
+const PAUSE_SECONDS_COLUMNS: Record<PausePhase, string> = {
+  "rw:1": "rw_module1_pause_seconds",
+  "rw:2": "rw_module2_pause_seconds",
+  break: "break_pause_seconds",
+  "math:1": "math_module1_pause_seconds",
+  "math:2": "math_module2_pause_seconds",
+};
+
+/** SQL column holding accumulated pause seconds for one phase. */
+export function pauseSecondsColumn(phase: PausePhase): string {
+  return PAUSE_SECONDS_COLUMNS[phase];
+}
+
+/** Maps D4 position to the pause phase that should be frozen. */
+export function pausePhaseFromPosition(position: ModulePosition): PausePhase | null {
+  switch (position.kind) {
+    case "module":
+      return `${position.section}:${position.module}` as PausePhase;
+    case "break":
+      return "break";
+    case "submitted":
+      return null;
+  }
+}
+
+export function modulePausePhase(section: Section, module: ModuleNumber): PausePhase {
+  return `${section}:${module}` as PausePhase;
+}
+
+/** Module deadline extended by prior pause segments (not the in-flight pause). */
+export function effectiveModuleDeadline(
+  section: Section,
+  module: ModuleNumber,
+  startedAt: string,
+  pauseSecondsAccumulated: number,
+): EpochMillis {
+  return moduleDeadline(section, module, startedAt) + pauseSecondsAccumulated * 1000;
+}
+
+/** Break deadline extended by prior pause segments. */
+export function effectiveBreakDeadline(
+  breakStartedAt: string,
+  pauseSecondsAccumulated: number,
+): EpochMillis {
+  return breakDeadline(breakStartedAt) + pauseSecondsAccumulated * 1000;
+}
+
+/**
+ * Clock reading for countdown/deadline checks. While paused on `expectedPhase`, returns
+ * the pause instant so remaining time stays frozen until resume.
+ */
+export function effectiveNow(
+  now: EpochMillis,
+  pausedAt: string | null,
+  pausedPhase: PausePhase | null,
+  expectedPhase: PausePhase,
+): EpochMillis {
+  if (pausedAt != null && pausedPhase === expectedPhase) {
+    return parseSqliteTimestamp(pausedAt);
+  }
+  return now;
+}
+
+export function isAttemptPaused(state: AttemptState): boolean {
+  return state.pausedAt != null;
+}
+
+/** Reads accumulated pause seconds for a phase from AttemptState. */
+export function pauseSecondsForPhase(state: AttemptState, phase: PausePhase): number {
+  switch (phase) {
+    case "rw:1":
+      return state.rwModule1PauseSeconds;
+    case "rw:2":
+      return state.rwModule2PauseSeconds;
+    case "break":
+      return state.breakPauseSeconds;
+    case "math:1":
+      return state.mathModule1PauseSeconds;
+    case "math:2":
+      return state.mathModule2PauseSeconds;
+  }
 }
 
 // ---------------------------------------------------------------------------

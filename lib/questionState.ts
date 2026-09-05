@@ -62,10 +62,14 @@
 import type Database from "better-sqlite3";
 import type { ModuleNumber, Section } from "./blueprint";
 import { saveAnswer } from "./attemptService";
+import { getAttemptState } from "./attemptState";
 import {
   checkAgainstDeadline,
-  moduleDeadline,
+  effectiveModuleDeadline,
+  effectiveNow,
+  modulePausePhase,
   moduleStartedAtColumn,
+  pauseSecondsForPhase,
   type EpochMillis,
 } from "./testFlow";
 
@@ -226,11 +230,17 @@ export function saveAnswerWithDeadline(
   const run = db.transaction((): SaveAnswerResult => {
     assertQuestionInModule(db, attemptId, section, module, questionId);
 
+    const state = getAttemptState(db, attemptId);
+    if (state.pausedAt != null) {
+      return { saved: false, isLate: false };
+    }
+
     const startedAt = readModuleStartedAt(db, attemptId, section, module);
-    const { accepted, isLate } = checkAgainstDeadline(
-      moduleDeadline(section, module, startedAt),
-      now,
-    );
+    const phase = modulePausePhase(section, module);
+    const pauseSeconds = pauseSecondsForPhase(state, phase);
+    const deadline = effectiveModuleDeadline(section, module, startedAt, pauseSeconds);
+    const clockNow = effectiveNow(now, state.pausedAt, state.pausedPhase, phase);
+    const { accepted, isLate } = checkAgainstDeadline(deadline, clockNow);
 
     if (!accepted) {
       // Past the grace window: leave whatever the student had saved before the buzzer

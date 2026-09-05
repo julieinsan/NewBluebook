@@ -1,16 +1,22 @@
 import type { ModulePosition } from "@/lib/testFlow";
 
-export function positionLabel(position: ModulePosition): string {
+export function positionLabel(position: ModulePosition, isPaused = false): string {
+  let base: string;
   switch (position.kind) {
     case "module":
-      return position.section === "rw"
-        ? `Reading and Writing · Module ${position.module}`
-        : `Math · Module ${position.module}`;
+      base =
+        position.section === "rw"
+          ? `Reading and Writing · Module ${position.module}`
+          : `Math · Module ${position.module}`;
+      break;
     case "break":
-      return "Section break";
+      base = "Section break";
+      break;
     case "submitted":
-      return "Submitted";
+      base = "Submitted";
+      break;
   }
+  return isPaused ? `Paused · ${base}` : base;
 }
 
 export function formatAttemptStartedAt(startedAt: string): string {

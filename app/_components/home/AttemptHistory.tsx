@@ -1,9 +1,25 @@
 import type { AttemptSummary } from "@/lib/attemptState";
 import Link from "next/link";
 import { formatAttemptStartedAt, positionLabel } from "./positionLabel";
+import { ResumeButton } from "./ResumeButton";
 
 export interface AttemptHistoryProps {
   attempts: AttemptSummary[];
+}
+
+function resumeControl(attempt: AttemptSummary, className: string, label: string) {
+  if (attempt.isPaused) {
+    return (
+      <ResumeButton attemptId={attempt.attemptId} className={className}>
+        {label}
+      </ResumeButton>
+    );
+  }
+  return (
+    <Link href={attempt.path} className={className}>
+      {label}
+    </Link>
+  );
 }
 
 export function AttemptHistory({ attempts }: AttemptHistoryProps) {
@@ -21,17 +37,18 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
     <div className="flex w-full max-w-lg flex-col gap-6">
       {resumable && (
         <section className="rounded-lg border border-accent/30 bg-accent/5 p-4 text-left">
-          <h2 className="text-sm font-semibold">Resume in progress</h2>
+          <h2 className="text-sm font-semibold">
+            {resumable.isPaused ? "Paused test" : "Resume in progress"}
+          </h2>
           <p className="mt-1 text-sm text-foreground/80">
-            {positionLabel(resumable.position)} · started{" "}
+            {positionLabel(resumable.position, resumable.isPaused)} · started{" "}
             {formatAttemptStartedAt(resumable.startedAt)}
           </p>
-          <Link
-            href={resumable.path}
-            className="mt-3 inline-block rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
-          >
-            Resume test
-          </Link>
+          {resumeControl(
+            resumable,
+            "mt-3 inline-block rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground",
+            resumable.isPaused ? "Resume test" : "Resume test",
+          )}
         </section>
       )}
 
@@ -43,16 +60,16 @@ export function AttemptHistory({ attempts }: AttemptHistoryProps) {
               <div className="min-w-0">
                 <p className="text-sm font-medium">Attempt #{attempt.attemptId}</p>
                 <p className="text-xs text-foreground/70">
-                  {formatAttemptStartedAt(attempt.startedAt)} · {positionLabel(attempt.position)}
+                  {formatAttemptStartedAt(attempt.startedAt)} ·{" "}
+                  {positionLabel(attempt.position, attempt.isPaused)}
                 </p>
               </div>
               {attempt.resumable ? (
-                <Link
-                  href={attempt.path}
-                  className="shrink-0 text-sm font-medium text-accent hover:underline"
-                >
-                  Resume
-                </Link>
+                resumeControl(
+                  attempt,
+                  "shrink-0 text-sm font-medium text-accent hover:underline",
+                  "Resume",
+                )
               ) : (
                 <span className="shrink-0 text-xs text-foreground/50">Completed</span>
               )}

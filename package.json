@@ -16,7 +16,8 @@
     "qa:questions": "tsx scripts/qa-questions.ts",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "test:ui": "vitest run",
-    "smoke:assembly": "tsx scripts/smoke-test-assembly.ts"
+    "smoke:assembly": "tsx scripts/smoke-test-assembly.ts",
+    "smoke:flow": "tsx scripts/smoke-test-flow.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
